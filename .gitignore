@@ -1,0 +1,12 @@
+agents
+poke-env
+pokemon-showdown
+replays
+wandb
+venv
+main.py
+replay.log
+.idea
+*/runs
+__pycache__
+pokemon-team-builder-*
