@@ -1,4 +1,5 @@
 # WIP
+This repository is a work in progress. You can already use it to generate teams. 
 
 # Pokemon Team Builder
 A [Transformer](https://huggingface.co/docs/transformers/index) based model for generating Pokemon teams.
