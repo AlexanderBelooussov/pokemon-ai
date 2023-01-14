@@ -24,7 +24,7 @@ def find_usage_file(format: str):
     for file in os.listdir('usage_data'):
         if format in file:
             return file
-    raise Exception(f"Could not find usage file for {format}")
+    raise FileNotFoundError(f"Could not find usage file for {format}")
 
 
 def make_tokens_from_team(chosen_pokemon, format):

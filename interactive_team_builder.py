@@ -9,7 +9,7 @@ from battle_tokenizer import BattleTokenizer, BERTBattleTokenizer
 from beam_search import beam_search
 from transformers import AutoModelForMaskedLM
 
-from utils import read_json, find_usage_file, make_tokens_from_team, make_input_ids, TEAM_1_START_INDEX
+from utils import read_json, find_usage_file, make_tokens_from_team, make_input_ids, TEAM_1_START_INDEX, DEVICE
 
 MODEL_PATH = "Zeniph/pokemon-team-builder-transformer-deberta4-large"
 
@@ -23,11 +23,15 @@ def load_model_interactive():
         if "tokenizer" in file:
             with open(f"interactive_model/{file}", 'rb') as f:
                 tokenizer = pickle.load(f)
-    model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH)
+    model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH).to(DEVICE)
     return model, tokenizer
 
 
 def analyse_viability(chosen_pokemon: List[str], format: str):
+    try:
+        usage_data = read_json('usage_data/' + find_usage_file(format))
+    except FileNotFoundError:
+        return None
     data = read_json('usage_data/' + find_usage_file(format))
     data = data['data']
     viability = []
@@ -144,7 +148,7 @@ def make_set_suggestion_pokemon(pokemon: str, usage_data=None, format: Optional[
 def make_set_suggestion_team(format: str, team: List[str]):
     try:
         usage_data = read_json('usage_data/' + find_usage_file(format))
-    except Exception:
+    except FileNotFoundError:
         print(f"Format {format} not found")
         for pokemon in team:
             print(f"{pokemon}\n")
@@ -222,6 +226,7 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
 
 
 if __name__ == '__main__':
+    model, tokenizer = load_model_interactive()
     print(f"{'=' * 20} Interactive Team Builder {'=' * 20}")
     print("Welcome to the interactive team builder!")
     print("This program will help you build a team for the current generation of competitive pokemon.")
@@ -251,7 +256,6 @@ if __name__ == '__main__':
         x = input("> ")
         format = format_map.get(x, None)
 
-    model, tokenizer = load_model_interactive()
     chosen_pokemon = []
     forbidden_pokemon = []
     suggested = None
