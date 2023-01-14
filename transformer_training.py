@@ -9,31 +9,38 @@ from transformers import TrainingArguments, Trainer, \
     AutoModelForMaskedLM, EarlyStoppingCallback, TrainerCallback, TrainerState, TrainerControl
 from transformers.integrations import WandbCallback
 
-from battle_tokenizer import BattleTokenizer
+from battle_tokenizer import BattleTokenizer, BERTBattleTokenizer
 from main import *
 from utils import *
 
 
 # TODO: split data into "brackets" based on elo
 # TODO: add lead as token
-# TODO: try always masking winner and format
+# TODO: shuffle each epoch
 
 class RemaskCallback(TrainerCallback):
-    def __init__(self, unmasked_train_dataset, unmasked_test_dataset):
+    def __init__(self, unmasked_train_dataset, unmasked_test_dataset, tokenizer):
         super().__init__()
+        self.tokenizer = tokenizer
         self.unmasked_train_dataset = unmasked_train_dataset
         self.unmasked_test_dataset = unmasked_test_dataset
+        self.masked_test_dataset = mask(unmasked_test_dataset, tokenizer)
 
     def on_epoch_begin(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         # make new dataloader
         DataLoader = torch.utils.data.DataLoader
-        kwargs['train_dataloader'] = DataLoader(mask(self.unmasked_train_dataset),
+        shuffled_train_dataset = shuffle_teams_dataset(self.tokenizer, self.unmasked_train_dataset)
+        np.random.shuffle(shuffled_train_dataset)
+        kwargs['train_dataloader'] = DataLoader(mask(shuffled_train_dataset, self.tokenizer),
                                                 batch_size=args.per_device_train_batch_size)
 
     def on_evaluate(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         # make new dataloader
         DataLoader = torch.utils.data.DataLoader
-        kwargs['eval_dataloader'] = DataLoader(mask(self.unmasked_test_dataset),
+        shuffled_test_dataset = shuffle_teams_dataset(self.tokenizer, self.unmasked_test_dataset)
+        # kwargs['eval_dataloader'] = DataLoader(self.masked_test_dataset,
+        #                                        batch_size=args.per_device_eval_batch_size)
+        kwargs['eval_dataloader'] = DataLoader(mask(shuffled_test_dataset, self.tokenizer),
                                                batch_size=args.per_device_eval_batch_size)
 
 
@@ -49,36 +56,73 @@ class MyTrainer(Trainer):
         super().train(*args, **kwargs)
 
 
+def find_teams_distilbert(inputs):
+    inputs = inputs['input_ids'][:]
+    team1 = []
+    sep_index = 0
+    team2 = []
+    for i, token in enumerate(inputs):
+        if token == tokenizer.special_token_map['[SEP]']:
+            if len(team1) == 0:
+                team1 = inputs[TEAM_1_START_INDEX:i]
+                sep_index = i
+                continue
+            elif len(team2) == 0:
+                team2 = inputs[sep_index + 1:i]
+                break
+    return team1, team2
+
+
+def find_teams_bert(inputs):
+    ids = inputs['input_ids'][:]
+    types = inputs['token_type_ids'][:]
+    team1 = []
+    team2 = []
+    for i, token in enumerate(ids):
+        if types[i] == 2:
+            team1.append(token)
+        elif types[i] == 3:
+            team2.append(token)
+    return team1, team2
+
+
 def shuffle_teams_dataset(tokenizer: BattleTokenizer, dataset):
     new_dataset = []
     for data in dataset:
         inputs = data['input_ids'][:]
-        team1 = []
-        sep_index = 0
-        team2 = []
-        for i, token in enumerate(inputs):
-            if token == tokenizer.special_token_map['[SEP]']:
-                if len(team1) == 0:
-                    team1 = inputs[TEAM_1_START_INDEX:i]
-                    sep_index = i
-                    continue
-                elif len(team2) == 0:
-                    team2 = inputs[sep_index + 1:i]
-                    break
-        np.random.shuffle(team1)
-        np.random.shuffle(team2)
-        new_input = inputs[:TEAM_1_START_INDEX] + \
-                    team1 + \
-                    [tokenizer.token_map['[SEP]']] + \
-                    team2 + \
-                    [tokenizer.token_map['[SEP]']]
-        while len(new_input) < INPUT_LENGTH:
-            new_input.append(tokenizer.special_token_map['[PAD]'])
+        if DISTILBERT_LIKE:
+            team1, team2 = find_teams_distilbert(data)
+            np.random.shuffle(team1)
+            np.random.shuffle(team2)
+            new_input = inputs[:TEAM_1_START_INDEX] + \
+                        team1 + \
+                        [tokenizer.token_map['[SEP]']] + \
+                        team2 + \
+                        [tokenizer.token_map['[SEP]']]
+            while len(new_input) < INPUT_LENGTH:
+                new_input.append(tokenizer.special_token_map['[PAD]'])
+            new_dataset.append({'input_ids': new_input,
+                                'attention_mask': data['attention_mask'][:]
+                                })
+        else:
+            team1, team2 = find_teams_bert(data)
+            np.random.shuffle(team1)
+            np.random.shuffle(team2)
+            new_input = inputs[:TEAM_1_START_INDEX] + \
+                        team1 + \
+                        team2
+            while len(new_input) < INPUT_LENGTH:
+                new_input.append(tokenizer.special_token_map['[PAD]'])
+            new_dataset.append({'input_ids': new_input,
+                                'attention_mask': data['attention_mask'][:],
+                                'token_type_ids': data['token_type_ids'][:],
+                                'position_ids': data['position_ids'][:]
+                                })
         # assert that padding is the same
-        assert inputs.count(tokenizer.token_map['[PAD]']) == new_input.count(tokenizer.token_map['[PAD]'])
-        new_dataset.append({'input_ids': new_input,
-                            'attention_mask': data['attention_mask'][:]
-                            })
+        assert inputs.count(tokenizer.token_map['[PAD]']) == new_dataset[-1]['input_ids'].count(
+            tokenizer.token_map['[PAD]'])
+        assert max(new_dataset[-1]['input_ids']) < tokenizer.vocab_size
+
     return new_dataset
 
 
@@ -87,51 +131,65 @@ def switched_sides_dataset(tokenizer, dataset):
     for data in dataset:
         inputs = data['input_ids'][:]
         inputs[0] = 1 if inputs[0] == 0 else 0
-        team1 = []
-        sep_index = 0
-        team2 = []
-        for i, token in enumerate(inputs):
-            if token == tokenizer.special_token_map['[SEP]']:
-                if len(team1) == 0:
-                    team1 = inputs[TEAM_1_START_INDEX:i]
-                    sep_index = i
-                    continue
-                elif len(team2) == 0:
-                    team2 = inputs[sep_index + 1:i]
-                    break
-        new_inputs = inputs[:TEAM_1_START_INDEX] + \
-                     team2 + \
-                     [tokenizer.token_map['[SEP]']] + \
-                     team1 + \
-                     [tokenizer.token_map['[SEP]']]
-        while len(new_inputs) < INPUT_LENGTH:
-            new_inputs.append(tokenizer.special_token_map['[PAD]'])
+        if DISTILBERT_LIKE:
+            team1, team2 = find_teams_distilbert(data)
+            new_inputs = inputs[:TEAM_1_START_INDEX] + \
+                         team2 + \
+                         [tokenizer.token_map['[SEP]']] + \
+                         team1 + \
+                         [tokenizer.token_map['[SEP]']]
+            while len(new_inputs) < INPUT_LENGTH:
+                new_inputs.append(tokenizer.special_token_map['[PAD]'])
+
+            switched_dataset.append({
+                'input_ids': new_inputs,
+                'attention_mask': data['attention_mask'][:]
+            })
+        else:
+            team1, team2 = find_teams_bert(data)
+            new_inputs = inputs[:TEAM_1_START_INDEX] + \
+                         team2 + \
+                         team1
+            while len(new_inputs) < INPUT_LENGTH:
+                new_inputs.append(tokenizer.token_map['[PAD]'])
+
+            new_types = data['token_type_ids'][:TEAM_1_START_INDEX] + \
+                        [2 for _ in range(len(team2))] + \
+                        [3 for _ in range(len(team1))]
+            while len(new_types) < INPUT_LENGTH:
+                new_types.append(max(new_types))
+            assert max(new_types) == 3
+
+            switched_dataset.append({
+                'input_ids': new_inputs,
+                'attention_mask': data['attention_mask'][:],
+                'token_type_ids': new_types,
+                'position_ids': data['position_ids'][:]
+            })
 
         # assert that padding is the same
-        assert inputs.count(tokenizer.token_map['[PAD]']) == new_inputs.count(tokenizer.token_map['[PAD]'])
+        assert inputs.count(tokenizer.token_map['[PAD]']) == switched_dataset[-1]['input_ids'].count(
+            tokenizer.token_map['[PAD]'])
+        assert data['input_ids'][0] != switched_dataset[-1]['input_ids'][0]
 
-        switched_dataset.append({
-            'input_ids': new_inputs,
-            'attention_mask': data['attention_mask'][:]
-        })
     # for i, data in enumerate(switched_dataset):
-    #     print(f"Switched {i}: {data}")
     #     print(f"Original {i}: {dataset[i]}")
+    #     print(f"Switched {i}: {data}")
     return switched_dataset
 
 
 def tokenize_dataset(formats: List[str], name: str):
-    if not os.path.exists('pickles/tokenizer.pkl'):
-        tokenizer = BattleTokenizer()
+    tokenizer_file = f"pickles/tokenizer.pkl" if DISTILBERT_LIKE else f"pickles/bert_tokenizer.pkl"
+    if not os.path.exists(tokenizer_file):
+        tokenizer = BattleTokenizer() if DISTILBERT_LIKE else BERTBattleTokenizer()
     else:
-        with open('pickles/tokenizer.pkl', 'rb') as f:
+        with open(tokenizer_file, 'rb') as f:
             tokenizer = pickle.load(f)
 
-    if not os.path.exists(f'pickles/dataset-{name}.pkl') or not os.path.exists('pickles/tokenizer.pkl'):
+    if not os.path.exists(f'pickles/dataset-{name}.pkl') or not os.path.exists(tokenizer_file):
         tokenizer.rating_dist = {}
         dataset = []
         for format in tqdm(formats, desc=f"Tokenizing formats", leave=False):
-            print(f"Tokenizing {format} replays...")
             for filename in tqdm(os.listdir(f'replays/{format}'), desc=f"Tokenizing {format} replays", leave=False):
                 if filename.endswith('.log'):
                     f = os.path.join(f'replays/{format}', filename)
@@ -142,9 +200,7 @@ def tokenize_dataset(formats: List[str], name: str):
                         # print(tokens)
                         if tokens is not None:
                             dataset.append(tokens)
-
-        print(f"Tokenized {len(dataset)} {formats} replays")
-        with open('pickles/tokenizer.pkl', 'wb') as f:
+        with open(tokenizer_file, 'wb') as f:
             pickle.dump(tokenizer, f)
         with open(f'pickles/dataset-{name}.pkl', 'wb') as f:
             pickle.dump(dataset, f)
@@ -191,30 +247,42 @@ def restore_ids(inputs):
 
 
 def prob_mask(inputs, max_value):
-    inputs["labels"] = [-100 for _ in inputs["input_ids"]]
-    for i, token in enumerate(inputs["input_ids"]):
+    masked_inputs = copy.deepcopy(inputs)
+    masked_inputs["labels"] = [-100 for _ in inputs["input_ids"]]
+    for i, token in enumerate(inputs["input_ids"][:]):
         if token == 2 or token == 3:
             continue
-        # elif np.random.random() < 0.15:
-        elif np.random.random() < 0.15 or i == 0 or i == 2:
-            inputs["labels"][i] = token
+
+        elif np.random.random() < 0.15:
+            masked_inputs["labels"][i] = token
             prob = np.random.random()
             if prob < 0.8:
-                inputs["input_ids"][i] = 4
+                masked_inputs["input_ids"][i] = 4
             elif prob < 0.9:
                 if i == 0:
-                    inputs["input_ids"][i] = 1 if inputs["input_ids"][i] == 0 else 0
+                    masked_inputs["input_ids"][i] = 1 if masked_inputs["input_ids"][i] == 0 else 0
                 else:
-                    inputs["input_ids"][i] = np.random.randint(5, max_value)
+                    masked_inputs["input_ids"][i] = np.random.randint(5, max_value)
     # print(inputs)
+    return masked_inputs
+
+
+def no_maks(inputs, max_value):
+    """
+    Sanity check, make sure that masking is indeed working as intended
+    """
+    inputs["labels"] = inputs["input_ids"][:]
     return inputs
 
 
-def mask(dataset):
+def mask(dataset, tokenizer=None):
     # find highest id in dataset
-    max_value = 0
-    for data in dataset:
-        max_value = max(max_value, max(data['input_ids']))
+    if tokenizer is None:
+        max_value = 0
+        for data in dataset:
+            max_value = max(max_value, max(data['input_ids']))
+    else:
+        max_value = tokenizer.vocab_size - 1
     masked = []
     for i, data in enumerate(dataset):
         # restore previous mask
@@ -222,7 +290,14 @@ def mask(dataset):
             restore_ids(data)
         # coinflip_mask(data, max_value)
         masked.append(prob_mask(data, max_value))
-    return dataset
+        # masked.append(no_maks(data, max_value))
+        # if i >= 128 and i <= 160:
+        #     print(f"Original {i}: {dataset[i]}")
+        #     print(f"Masked {i}: {masked[i]}")
+
+    # print(dataset[0])
+    # print(masked[0])
+    return masked
 
 
 def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved=False, save_name=None):
@@ -247,12 +322,12 @@ def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved
     # modify the training dataset to add more samples
     switched = switched_sides_dataset(tokenizer, dataset_train)
     dataset_train.extend(switched)
-    shuffles = []
-    for i in range(4):
-        shuffled = shuffle_teams_dataset(tokenizer, dataset_train)
-        shuffles.append(shuffled)
-    for shuffle in shuffles:
-        dataset_train.extend(shuffle)
+    # shuffles = []
+    # for i in range(4):
+    #     shuffled = shuffle_teams_dataset(tokenizer, dataset_train)
+    #     shuffles.append(shuffled)
+    # for shuffle in shuffles:
+    #     dataset_train.extend(shuffle)
     np.random.shuffle(dataset_train)
 
     print(f"\nTraining on {len(dataset_train)} samples\n")
@@ -273,6 +348,13 @@ def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved
             dropout=0.1,
             attention_dropout=0.1,
         )
+        if not DISTILBERT_LIKE:
+            config.type_vocab_size = 4
+            config.num_hidden_layers = 12
+            config.num_attention_heads = 12
+        else:
+            config.n_layers = 6
+            config.n_heads = 12
 
         model = AutoModelForMaskedLM.from_config(
             config=config
@@ -280,9 +362,9 @@ def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved
 
     training_args = TrainingArguments(
         output_dir=name,
-        learning_rate=2e-5,
-        per_device_train_batch_size=32,
-        per_device_eval_batch_size=32,
+        learning_rate=1e-5,
+        per_device_train_batch_size=128,
+        per_device_eval_batch_size=128,
         num_train_epochs=200,
         weight_decay=0.01,
         evaluation_strategy="epoch",
@@ -291,8 +373,8 @@ def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved
         eval_steps=100,
         load_best_model_at_end=True,
         push_to_hub=False,
-        metric_for_best_model="weighted_f1",
-        greater_is_better=True,
+        # metric_for_best_model="weighted_f1",
+        # greater_is_better=True,
     )
 
     trainer = MyTrainer(
@@ -302,7 +384,8 @@ def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved
         eval_dataset=dataset_test,
         callbacks=[
             EarlyStoppingCallback(early_stopping_patience=10),
-            RemaskCallback(unmasked_train_dataset=dataset_train, unmasked_test_dataset=dataset_test),
+            RemaskCallback(unmasked_train_dataset=dataset_train, unmasked_test_dataset=dataset_test,
+                           tokenizer=tokenizer),
             WandbCallback()
         ],
         compute_metrics=compute_metrics,
@@ -347,6 +430,10 @@ def test_outcome_prediction(dataset, model=None, name: str = DEFAULT_MODEL,
             model_input = copy.deepcopy(test)  # copy the test data
             model_input["input_ids"][test_index] = 4
             model_input["input_ids"] = torch.tensor(test["input_ids"]).unsqueeze(0).to(DEVICE)
+            if "token_type_ids" in test:
+                model_input["token_type_ids"] = torch.tensor(test["token_type_ids"]).unsqueeze(0).to(DEVICE)
+            if "position_ids" in test:
+                model_input["position_ids"] = torch.tensor(test["position_ids"]).unsqueeze(0).to(DEVICE)
             model_input["attention_mask"] = torch.tensor(test["attention_mask"]).unsqueeze(0).to(DEVICE)
             output = model(**model_input)
             logits = output.logits
@@ -377,22 +464,23 @@ def test_prediction_per_format(dataset, model=None, name: str = 'pokemon-team-bu
 
 if __name__ == '__main__':
     formats = ['gen9ou', 'gen9monotype', 'gen9doublesou', 'gen9vgc2023series1', 'gen9nationaldex', 'gen9uu', 'gen9ru',
-               'gen9ubers']
-    name = f'pokemon-team-builder-transformer-v2'
+               'gen9ubers', 'gen9vgc2023series2']
+    name = f'pokemon-team-builder-transformer-deberta4-large'
     seed = 42
     np.random.seed(seed)
     dataset, tokenizer = tokenize_dataset(formats=formats, name=name)
+
     dataset_train, dataset_test = train_test_split(dataset, test_size=0.2, random_state=seed)
     dataset_train, dataset_val = train_test_split(dataset_train, test_size=0.2, random_state=seed)
 
     # model = train(dataset_train, dataset_val, tokenizer, name=name, from_saved=True,
     #               save_name="pokemon-team-builder-transformer-v2")
     # model = train(dataset_train, dataset_val, tokenizer, name=name, from_saved=False)
-
-    # dataset_test = mask(dataset_test)
+    #
+    # # dataset_test = mask(dataset_test)
     test_outcome_prediction(dataset_test, name=name, test_index=0)
+    test_outcome_prediction(dataset_test, name=name, test_index=1)
     test_outcome_prediction(dataset_test, name=name, test_index=2)
-    test_outcome_prediction(dataset_test, name=name, test_index=4)
     #
     # test_prediction_per_format(dataset_test, name=name, test_index=0)
     # test_prediction_per_format(dataset_test, name=name, test_index=4)

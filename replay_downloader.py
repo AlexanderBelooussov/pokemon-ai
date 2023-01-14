@@ -43,4 +43,4 @@ if __name__ == '__main__':
     search_format(format='gen9ru')
     search_format(format='gen9ubers')
     search_format(format='gen9vgc2023series2')
-    time.sleep(5)
+    input('Press enter to exit')

@@ -1,10 +1,12 @@
 # finding best team with beam search
 import warnings
+import torch
+from utils import make_tokens_from_team, make_input_ids, TEAM_1_START_INDEX, load_model
 
-from utils import *
 
-
-def beam_step(model, tokenizer, chosen_pokemon, format, prob, n_beams=5):
+def beam_step(model, tokenizer, chosen_pokemon, format, prob, n_beams=5, forbidden_pokemon=None):
+    if forbidden_pokemon is None:
+        forbidden_pokemon = []
     candidates = {}
     with torch.no_grad():
         tokens = make_tokens_from_team(chosen_pokemon[:], format)
@@ -12,33 +14,41 @@ def beam_step(model, tokenizer, chosen_pokemon, format, prob, n_beams=5):
         logits = model(**ids).logits
         mask_logits = logits[0, len(chosen_pokemon) + TEAM_1_START_INDEX, :]
         mask_logits = torch.softmax(mask_logits, dim=0)
-        top_n = torch.topk(mask_logits, n_beams)
-        for i in range(n_beams):
+        k = n_beams + len(forbidden_pokemon)
+        top_k = torch.topk(mask_logits, k)
+        # print(top_n)
+        for i in range(n_beams + len(forbidden_pokemon)):
             candidate = chosen_pokemon[:]
-            candidate.append(tokenizer.decode(top_n.indices[i]))
-            candidates[tuple(candidate)] = top_n.values[i] * prob
+            poke = tokenizer.decode(top_k.indices[i])
+            if poke in forbidden_pokemon:
+                continue
+            candidate.append(poke)
+            candidates[tuple(candidate)] = top_k.values[i] * prob
     return candidates
 
 
-def beam_search(model=None, tokenizer=None, chosen_pokemon=None, format='gen9ou', n_beams=5):
+def beam_search(model=None, tokenizer=None, chosen_pokemon=None, format='gen9ou', n_beams=5, forbidden_pokemon=None):
     if model is None:
         tokenizer, model = load_model()
     if tokenizer is None:
         tokenizer, _ = load_model()
     if chosen_pokemon is None:
         chosen_pokemon = []
+    if forbidden_pokemon is None:
+        forbidden_pokemon = []
     t = len(chosen_pokemon)
     candidates = {tuple(chosen_pokemon): 1}
     for i in range(t, 6):
         new_candidates = {}
-        for candidate in candidates:
+        for candidate in candidates.keys():
             new_candidates.update(beam_step(
                 model,
                 tokenizer,
                 list(candidate),
                 format,
                 candidates[candidate],
-                n_beams=n_beams + 1
+                n_beams=n_beams + 1,
+                forbidden_pokemon=forbidden_pokemon
             ))
         candidates = new_candidates
         # only keep n_beams candidates
@@ -47,6 +57,7 @@ def beam_search(model=None, tokenizer=None, chosen_pokemon=None, format='gen9ou'
         to_keep = {}
         seen = []
         for candidate in sorted(candidates, key=candidates.get, reverse=True):
+            # print(candidate)
             sorted_candidate = tuple(sorted(candidate))
             if sorted_candidate not in seen and len(set(candidate)) == i + 1:
                 to_keep[candidate] = candidates[candidate]
@@ -64,4 +75,4 @@ def beam_search(model=None, tokenizer=None, chosen_pokemon=None, format='gen9ou'
 if __name__ == "__main__":
     base = ['Victini']
     format = 'gen9nationaldex'
-    print(beam_search(base, format, n_beams=20))
+    print(beam_search(chosen_pokemon=base, format=format, n_beams=20))

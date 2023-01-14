@@ -1,14 +1,30 @@
+import os
+import pickle
 from typing import List, Optional
 
 import numpy as np
+import torch
 
-from battle_tokenizer import *
+from battle_tokenizer import BattleTokenizer, BERTBattleTokenizer
 from beam_search import beam_search
-from utils import *
+from transformers import AutoModelForMaskedLM
+
+from utils import read_json, find_usage_file, make_tokens_from_team, make_input_ids, TEAM_1_START_INDEX
+
+MODEL_PATH = "Zeniph/pokemon-team-builder-transformer-deberta4-large"
 
 
 # TODO: use data classes and add printing to them
 # TODO: Make suggested sets always legal
+
+
+def load_model_interactive():
+    for file in os.listdir(f"interactive_model"):
+        if "tokenizer" in file:
+            with open(f"interactive_model/{file}", 'rb') as f:
+                tokenizer = pickle.load(f)
+    model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH)
+    return model, tokenizer
 
 
 def analyse_viability(chosen_pokemon: List[str], format: str):
@@ -61,7 +77,7 @@ def make_set_suggestion_pokemon(pokemon: str, usage_data=None, format: Optional[
     try:
         data = usage_data['data'][pokemon]
     except KeyError:
-        print(f"Could not find {pokemon} in usage data")
+        print(f"{pokemon}")
         return None
     pokemon_data = usage_data['data'][pokemon]
     abilities = pokemon_data['Abilities']
@@ -126,7 +142,14 @@ def make_set_suggestion_pokemon(pokemon: str, usage_data=None, format: Optional[
 
 
 def make_set_suggestion_team(format: str, team: List[str]):
-    usage_data = read_json('usage_data/' + find_usage_file(format))
+    try:
+        usage_data = read_json('usage_data/' + find_usage_file(format))
+    except Exception:
+        print(f"Format {format} not found")
+        for pokemon in team:
+            print(f"{pokemon}\n")
+        return None
+
     suggestions = []
     for pokemon in team:
         suggestion = make_set_suggestion_pokemon(pokemon, usage_data=usage_data)
@@ -138,7 +161,8 @@ def make_set_suggestion_team(format: str, team: List[str]):
         suggestion = suggestions[i]
         if suggestion is None:
             continue
-        abilities, items, moves, spreads = suggestion['abilities'], suggestion['items'], suggestion['moves'], suggestion['spreads']
+        abilities, items, moves, spreads = suggestion['abilities'], suggestion['items'], suggestion['moves'], \
+                                           suggestion['spreads']
         print(f"{pokemon} Alternatives:")
         if len(abilities) > 1:
             for i, (ability, a_score) in enumerate(abilities):
@@ -162,19 +186,29 @@ def make_set_suggestion_team(format: str, team: List[str]):
         #     print()
 
 
-def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20):
+def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbidden_pokemon=None):
+    if forbidden_pokemon is None:
+        forbidden_pokemon = []
     tokens = make_tokens_from_team(chosen_pokemon[:], format)
     ids = make_input_ids(tokens, tokenizer)
+    # print(ids)
     logits = model(**ids).logits
     mask_logits = logits[0, len(chosen_pokemon) + TEAM_1_START_INDEX, :]
     mask_logits = torch.softmax(mask_logits, dim=0)
     topk = torch.topk(mask_logits, n_suggestions)
+    pos = 1
     for i, pokemon in enumerate(topk.indices):
-        print(f"\t{i + 1}.\t{tokenizer.decode(pokemon).ljust(20)}\tscore: {topk.values[i] * 100:.2f}")
+        pokemon = tokenizer.decode(pokemon)
+        if pokemon in chosen_pokemon or pokemon in forbidden_pokemon:
+            continue
+        # print(f"\t{i + 1}.\t{pokemon}\tscore: {topk.values[i] * 100:.2f}")
+        print(f"\t{pos}.\t{pokemon.ljust(20)}\tscore: {topk.values[i] * 100:.2f}")
+        pos += 1
 
     print(f"\n Suggestions for full teams:")
-    beam_search_results = beam_search(model, tokenizer, chosen_pokemon, format, n_suggestions)
+    beam_search_results = beam_search(model, tokenizer, chosen_pokemon, format, n_suggestions, forbidden_pokemon)
     ljust_size = max([max([len(pokemon) for pokemon in team]) for team, _ in beam_search_results]) + 2
+    power = 6 - len(chosen_pokemon)
     for i, (team, score) in enumerate(beam_search_results[:10]):
         print(f"\t{i + 1}.\t"
               f"{team[0].ljust(ljust_size)}"
@@ -183,7 +217,7 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20):
               f"{team[3].ljust(ljust_size)}"
               f"{team[4].ljust(ljust_size)}"
               f"{team[5].ljust(ljust_size)}"
-              f"\tscore: {score * 100:.2f}")
+              f"\tscore: {score * np.power(10, power):.2f}")
     return beam_search_results[0][0]
 
 
@@ -201,6 +235,8 @@ if __name__ == '__main__':
         print("\t5. [Gen9] National Dex")
         print("\t6. [Gen9] Ubers")
         print("\t7. [Gen9] UU")
+        print("\t8. [Gen9] RU")
+        print("\t9. [Gen9] VGC 2023 Series 2")
         format_map = {
             '1': 'gen9ou',
             '2': 'gen9doublesou',
@@ -209,24 +245,30 @@ if __name__ == '__main__':
             '5': 'gen9nationaldex',
             '6': 'gen9ubers',
             '7': 'gen9uu',
+            '8': 'gen9ru',
+            '9': 'gen9vgc2023series2'
         }
         x = input("> ")
         format = format_map.get(x, None)
 
-    tokenizer, model = load_model()
+    model, tokenizer = load_model_interactive()
     chosen_pokemon = []
+    forbidden_pokemon = []
     suggested = None
     # chosen_pokemon = ['Dragapult', 'Roaring Moon', 'Iron Valiant', 'Great Tusk', 'Chien-Pao', 'Rotom-Wash']
     while len(chosen_pokemon) < 6:
         print()
         if len(chosen_pokemon):
             print(f"Your current team: {', '.join(chosen_pokemon)}")
+        if len(forbidden_pokemon):
+            print(f"Forbidden Pokemon: {', '.join(forbidden_pokemon)}")
         print(f"Great! Now, please select enter the {len(chosen_pokemon) + 1}"
               f"{'st' if len(chosen_pokemon) == 0 else 'nd' if len(chosen_pokemon) == 1 else 'rd' if len(chosen_pokemon) == 2 else 'th'} "
               f"pokemon in your team.")
+        print("\tTo forbid a pokemon from being suggested, enter 'forbid <pokemon>'.")
         print("\t1. If you would like to see the usage stats for the current format, enter 'usage' or 1.")
         print("\t2. If you would like to see the viability ceiling for the current format, enter 'viability' or 2.")
-        print("\t3. you would like some suggestions for the first pokemon in your team, enter 'suggestions' or 3.")
+        print("\t3. If you would like some suggestions for the first pokemon in your team, enter 'suggestions' or 3.")
         if suggested is not None:
             print("\t4. If you would like to accept the (top) suggested team, enter 'accept' or 4.")
         x = input("> ")
@@ -236,13 +278,22 @@ if __name__ == '__main__':
             print("Viability ceiling is not yet implemented.")
         elif x == "suggestions" or x == "3":
             print(f"Here are some suggestions for the first pokemon in your team:")
-            suggested = run_model(tokenizer, model, chosen_pokemon, format)
+            suggested = run_model(tokenizer, model, chosen_pokemon, format, forbidden_pokemon=forbidden_pokemon)
         elif x == "accept" or x == "4":
             if suggested is not None:
                 chosen_pokemon = suggested
                 suggested = None
             else:
                 print("Ask for suggestions first.")
+        elif x.startswith("forbid"):
+            pokemon = x.split(" ")[1]
+            if pokemon in chosen_pokemon:
+                print(f"You have already chosen {pokemon}.")
+            elif pokemon in forbidden_pokemon:
+                print(f"You have already forbidden {pokemon}.")
+            else:
+                forbidden_pokemon.append(pokemon)
+                print(f"Forbidden {pokemon}.")
         elif x in tokenizer.get_vocab():
             chosen_pokemon.append(x)
             suggested = None

@@ -7,7 +7,7 @@ from utils import *
 
 class BattleTokenizer:
     def __init__(self):
-
+        self.name = "tokenizer"
         self.formats = [
             'gen9ou',
             'gen9monotype',
@@ -16,9 +16,10 @@ class BattleTokenizer:
             'gen9nationaldex',
             'gen9uu',
             'gen9ru',
-            'gen9ubers'
+            'gen9ubers',
+            'gen9vgc2023series2'
         ]
-        self.special_tokens = ["[PAD]", "[SEP]"]
+        self.special_tokens = ['P1 Win', 'P2 Win', "[PAD]", "[SEP]", '[MASK]']
         self.special_token_map = {
             'P1 Win': 0,
             'P2 Win': 1,
@@ -97,9 +98,73 @@ class BattleTokenizer:
         if isinstance(pokemon_id, int):
             return reverse_dict[pokemon_id]
         elif isinstance(pokemon_id, list):
-            return [reverse_dict[i] for i in pokemon_id]
+            return [self.decode(i) for i in pokemon_id]
         try:
             decoded = reverse_dict[int(pokemon_id)]
             return decoded
         except:
             raise ValueError(f"pokemon_id must be int or list, not {type(pokemon_id)}, {pokemon_id}")
+
+
+class BERTBattleTokenizer(BattleTokenizer):
+    def __init__(self):
+        super().__init__()
+        self.special_token_map = {
+            'P1 Win': 0,
+            'P2 Win': 1,
+            "[PAD]": 2,
+            "[SEP]": 3,
+            '[MASK]': 4
+        }
+        self.name = "bert_tokenizer"
+
+    def encode(self, tokens: Union[List[Union[str, int]], str, int]):
+        if isinstance(tokens, int) or isinstance(tokens, str):
+            return self._encode_token(tokens)
+        ids = []
+        type_ids = [0] + [1]
+        current_type = 2
+        for i, token in enumerate(tokens[:]):
+            if token == "[SEP]":
+                current_type += 1
+                continue
+            ids.append(self._encode_token(token))
+            if i >= 2:
+                type_ids.append(current_type)
+
+        while len(ids) < self.expected_input_length:
+            ids.append(self.special_token_map["[PAD]"])
+            type_ids.append(max(type_ids))
+
+        attention_mask = [1 if i != self.special_token_map["[PAD]"] else 0 for i in ids[:]]
+        position_ids = [0 for i in range(len(ids))]
+
+
+        assert len(ids) == len(type_ids) == len(attention_mask) == len(position_ids)
+        assert ids[0] in self._encode_list([0, 1, '[MASK]'])
+        assert ids[1] in self._encode_list(self.formats + ['[MASK]'])
+        assert max(type_ids) == 3
+
+        ids = {
+            "input_ids": ids[:],
+            "attention_mask": attention_mask,
+            "token_type_ids": type_ids,
+            "position_ids": position_ids
+        }
+        self.vocab_size = len(self.token_map) + 1
+        return ids
+
+    def from_file(self, format, bid):
+        tokens = []
+        battle: Battle = parse_replay(format, bid)
+        if battle is None:
+            return None
+        winner_index = 'P1 Win' if battle.winner == battle.p1.name else 'P2 Win'
+        tokens.append(winner_index)
+        tokens.append(battle.format)
+        for i, player in enumerate([battle.p1, battle.p2]):
+            # tokens.append(player.rating)
+            for pokemon in player.team:
+                tokens.append(pokemon.name)
+            tokens.append("[SEP]")
+        return self.encode(tokens)
