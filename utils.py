@@ -5,7 +5,8 @@ from typing import Optional
 import torch
 import os
 
-from transformers import DistilBertForMaskedLM, DistilBertConfig, DebertaConfig, DebertaForMaskedLM, RobertaConfig, RobertaForMaskedLM
+from transformers import DistilBertForMaskedLM, DistilBertConfig, DebertaConfig, DebertaForMaskedLM, RobertaConfig, \
+    RobertaForMaskedLM
 
 Model = DebertaForMaskedLM
 Config = DebertaConfig
@@ -14,7 +15,7 @@ DISTILBERT_LIKE = False
 # Model = DistilBertForMaskedLM
 # Config = DistilBertConfig
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
-DEFAULT_MODEL = 'pokemon-team-builder-transformer-deberta4-large'
+DEFAULT_MODEL = 'pokemon-team-builder-transformer-deberta6-team-builder'
 INPUT_LENGTH = 18 if DISTILBERT_LIKE else 14
 TEAM_1_START_INDEX = 4 if DISTILBERT_LIKE else 2
 
@@ -34,14 +35,16 @@ def make_tokens_from_team(chosen_pokemon, format):
         tokens += [format]
         tokens += ["[SEP]"]
         tokens += chosen_pokemon
-        tokens += ["[MASK]"]
+        if len(chosen_pokemon) < 6:
+            tokens += ["[MASK]"]
         while len(tokens) < TEAM_1_START_INDEX + 6:
-            tokens += ["[PAD]"]
-        tokens += ["[SEP]", "[PAD]", "[PAD]", "[PAD]", "[PAD]", "[PAD]", "[PAD]", "[PAD]"]
+            tokens += ["[MASK]"]
+        tokens += ["[SEP]", "[PAD]", "[PAD]", "[PAD]", "[PAD]", "[PAD]", "[PAD]", "[SEP]"]
     else:
         tokens += [format]
         tokens += chosen_pokemon
-        tokens += ["[MASK]"]
+        if len(chosen_pokemon) < 6:
+            tokens += ["[MASK]"]
         while len(tokens) < TEAM_1_START_INDEX + 6:
             tokens += ["[PAD]"]
         tokens += ["[SEP]", "[PAD]", "[PAD]", "[PAD]", "[PAD]", "[PAD]", "[PAD]"]
@@ -57,7 +60,13 @@ def make_input_ids(tokens, tokenizer):
         ids['position_ids'] = torch.tensor(ids['position_ids']).unsqueeze(0).to(DEVICE)
     if 'token_type_ids' in ids:
         ids['token_type_ids'] = torch.tensor(ids['token_type_ids']).unsqueeze(0).to(DEVICE)
+
     return ids
+
+
+def make_ids_from_team(chosen_pokemon, format, tokenizer):
+    tokens = make_tokens_from_team(chosen_pokemon, format)
+    return make_input_ids(tokens, tokenizer)
 
 
 def load_model(name: Optional[str] = None):

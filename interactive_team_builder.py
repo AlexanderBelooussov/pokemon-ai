@@ -4,27 +4,81 @@ from typing import List, Optional
 
 import numpy as np
 import torch
+from tqdm import tqdm
 
 from battle_tokenizer import BattleTokenizer, BERTBattleTokenizer
-from beam_search import beam_search
+from beam_search import beam_search, beam_search_batched
 from transformers import AutoModelForMaskedLM
 
-from utils import read_json, find_usage_file, make_tokens_from_team, make_input_ids, TEAM_1_START_INDEX, DEVICE
+from utils import read_json, find_usage_file, make_tokens_from_team, make_input_ids, TEAM_1_START_INDEX, DEVICE, \
+    make_ids_from_team
 
-MODEL_PATH = "Zeniph/pokemon-team-builder-transformer-deberta4-large"
+# MODEL_PATH_BASE = "Zeniph/pokemon-team-builder-transformer-"
+# MODEL_PATH_TYPE = "deberta4-large"
+MODEL_PATH_BASE = "pokemon-team-builder-transformer-"
+MODEL_PATH_TYPE = "deberta6-team-builder"
+WIN_PROB_MODEL = 'deberta6-viability'
 
 
 # TODO: use data classes and add printing to them
 # TODO: Make suggested sets always legal
-
+# TODO: evaluate viability using second model
 
 def load_model_interactive():
+    tokenizer_name = MODEL_PATH_TYPE.split('-')[0]
     for file in os.listdir(f"interactive_model"):
-        if "tokenizer" in file:
+        if tokenizer_name in file:
             with open(f"interactive_model/{file}", 'rb') as f:
                 tokenizer = pickle.load(f)
-    model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH).to(DEVICE)
+    model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH_BASE + MODEL_PATH_TYPE).to(DEVICE).eval()
     return model, tokenizer
+
+
+def get_win_prob(model, tokenizer, team, format):
+    model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH_BASE + WIN_PROB_MODEL).to(DEVICE).eval()
+    ids = make_ids_from_team(team, format, tokenizer)
+    ids['input_ids'][0][0] = tokenizer.special_token_map['[MASK]']
+    logits = model(**ids).logits
+    logits = logits[0, 0, :2]
+    logits = torch.softmax(logits, dim=0)
+    win_logit = logits[0].item()
+    return win_logit
+
+def get_win_prob_batched(model, tokenizer, teams, format):
+    model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH_BASE + WIN_PROB_MODEL).to(DEVICE).eval()
+    all_inputs = []
+    for team in teams:
+        ids = make_ids_from_team(team, format, tokenizer)
+        ids['input_ids'][0][0] = tokenizer.special_token_map['[MASK]']
+        all_inputs.append(ids)
+    logits = model(**{
+        "input_ids": torch.cat([x["input_ids"] for x in all_inputs], dim=0),
+        "attention_mask": torch.cat([x["attention_mask"] for x in all_inputs], dim=0),
+        "token_type_ids": torch.cat([x["token_type_ids"] for x in all_inputs], dim=0),
+        "position_ids": torch.cat([x["position_ids"] for x in all_inputs], dim=0),
+    }).logits
+    logits = logits[:, 0, :2]
+    logits = torch.softmax(logits, dim=1)
+    win_logit = logits[:, 0].tolist()
+    return win_logit
+
+
+def get_team_probability(model, tokenizer, team, format):
+    forbidden = set(tokenizer.token_map.keys()) - set(team)
+    beam_search_results = beam_search_batched(model, tokenizer, [], format, 20, list(forbidden), silent=True)
+    prob = beam_search_results[0][1]
+    return prob
+    # intermediate = []
+    # probs = []
+    # for i, pokemon in enumerate(team):
+    #     ids = make_ids_from_team(intermediate, format, tokenizer)
+    #     logits = model(**ids).logits
+    #     logits = logits[0, TEAM_1_START_INDEX + i, :]
+    #     logits = torch.softmax(logits, dim=0)
+    #     probs.append(logits[tokenizer.encode(pokemon)].item())
+    #     intermediate.append(pokemon)
+    # print(probs)
+    # return np.prod(probs) * np.power(10, power)
 
 
 def analyse_viability(chosen_pokemon: List[str], format: str):
@@ -32,6 +86,8 @@ def analyse_viability(chosen_pokemon: List[str], format: str):
         usage_data = read_json('usage_data/' + find_usage_file(format))
     except FileNotFoundError:
         return None
+
+    print("Here is the viability of chosen team:")
     data = read_json('usage_data/' + find_usage_file(format))
     data = data['data']
     viability = []
@@ -145,6 +201,25 @@ def make_set_suggestion_pokemon(pokemon: str, usage_data=None, format: Optional[
     }
 
 
+def generate_random_team(model, tokenizer, format, team, forbidden_pokemon):
+    t = team[:]
+    if len(team) == 6:
+        return t
+    ids = make_ids_from_team(t, format, tokenizer)
+    logits = model(**ids).logits
+    index = TEAM_1_START_INDEX + len(t)
+    logits = logits[0, index, :]
+    logits = torch.softmax(logits, dim=0).detach().cpu().numpy()
+    done = False
+    while not done:
+        poke_id = np.random.choice(len(logits), p=logits)
+        poke_name = tokenizer.decode(poke_id)
+        if poke_name not in forbidden_pokemon and poke_name not in t:
+            done = True
+            t.append(poke_name)
+    return generate_random_team(model, tokenizer, format, t, forbidden_pokemon)
+
+
 def make_set_suggestion_team(format: str, team: List[str]):
     try:
         usage_data = read_json('usage_data/' + find_usage_file(format))
@@ -154,6 +229,7 @@ def make_set_suggestion_team(format: str, team: List[str]):
             print(f"{pokemon}\n")
         return None
 
+    print("Here are some suggestions for finalizing your team:")
     suggestions = []
     for pokemon in team:
         suggestion = make_set_suggestion_pokemon(pokemon, usage_data=usage_data)
@@ -199,21 +275,48 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
     logits = model(**ids).logits
     mask_logits = logits[0, len(chosen_pokemon) + TEAM_1_START_INDEX, :]
     mask_logits = torch.softmax(mask_logits, dim=0)
-    topk = torch.topk(mask_logits, n_suggestions)
+    topk = torch.topk(mask_logits, n_suggestions + len(chosen_pokemon) + len(forbidden_pokemon))
     pos = 1
     for i, pokemon in enumerate(topk.indices):
         pokemon = tokenizer.decode(pokemon)
         if pokemon in chosen_pokemon or pokemon in forbidden_pokemon:
             continue
         # print(f"\t{i + 1}.\t{pokemon}\tscore: {topk.values[i] * 100:.2f}")
-        print(f"\t{pos}.\t{pokemon.ljust(20)}\tscore: {topk.values[i] * 100:.2f}")
+        print(f"\t{pos}.\t{pokemon.ljust(20)}\tscore: {topk.values[i] * 100 :.2f}")
         pos += 1
+        if pos > n_suggestions:
+            break
 
-    print(f"\n Suggestions for full teams:")
-    beam_search_results = beam_search(model, tokenizer, chosen_pokemon, format, n_suggestions, forbidden_pokemon)
+    print(f"\nSuggestions for full teams")
+    final = []
+
+    # estimate probabilities of given team
+    if len(chosen_pokemon) > 0:
+        forbidden = set(tokenizer.token_map.keys()) - set(chosen_pokemon)
+        bsr = beam_search_batched(model, tokenizer, [], format, 20, list(forbidden), silent=True, total_steps=len(chosen_pokemon))
+        est_chosen_prob = bsr[0][1]
+        chosen_pokemon = list(bsr[0][0])
+    else:
+        est_chosen_prob = 1
+
+    beam_search_results = beam_search_batched(model, tokenizer, chosen_pokemon, format, 200, forbidden_pokemon)
+    beam_search_results = beam_search_results[:200]
+    win_scores = get_win_prob_batched(None, tokenizer, [x[0] for x in beam_search_results], format)
+
+
+    for i, (team, score) in tqdm(enumerate(beam_search_results), desc="Evaluating Teams", leave=False, total=len(beam_search_results)):
+        # winl = get_win_prob(model, tokenizer, team, format)
+        winl = win_scores[i]
+        if len(chosen_pokemon) > 8:
+            real_prob_score = get_team_probability(model, tokenizer, team, format)
+        else:
+            real_prob_score = score * est_chosen_prob
+        combined_score = winl * real_prob_score
+        final.append((team, real_prob_score, winl, combined_score))
     ljust_size = max([max([len(pokemon) for pokemon in team]) for team, _ in beam_search_results]) + 2
-    power = 6 - len(chosen_pokemon)
-    for i, (team, score) in enumerate(beam_search_results[:10]):
+
+    final = sorted(final, key=lambda x: x[3], reverse=True)[:10]
+    for i, (team, prob_score, win_score, combined_score) in enumerate(final):
         print(f"\t{i + 1}.\t"
               f"{team[0].ljust(ljust_size)}"
               f"{team[1].ljust(ljust_size)}"
@@ -221,8 +324,23 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
               f"{team[3].ljust(ljust_size)}"
               f"{team[4].ljust(ljust_size)}"
               f"{team[5].ljust(ljust_size)}"
-              f"\tscore: {score * np.power(10, power):.2f}")
-    return beam_search_results[0][0]
+              f"\tProb Score: {prob_score * np.power(10, 6):5.2f}"
+              f"\tWin Score: {win_score*100:5.2f}"
+              f"\tCombined Score: {combined_score * np.power(10, 6):5.2f}")
+    # print()
+    # print(f"\tBased on Win Probability:")
+    # for i, ((team, prob_score), win_score) in enumerate(sorted(final, key=lambda x: x[1], reverse=True)[:10]):
+    #     print(f"\t{i + 1}.\t"
+    #           f"{team[0].ljust(ljust_size)}"
+    #           f"{team[1].ljust(ljust_size)}"
+    #           f"{team[2].ljust(ljust_size)}"
+    #           f"{team[3].ljust(ljust_size)}"
+    #           f"{team[4].ljust(ljust_size)}"
+    #           f"{team[5].ljust(ljust_size)}"
+    #           f"\tProb Score: {prob_score * np.power(10, power):5.2f}"
+    #           f"\t\tWin Score: {win_score:5.2f}"
+    #           f"\t\tCombined: {prob_score*win_score* np.power(10, power):5.2f}")
+    return final[0][0]
 
 
 if __name__ == '__main__':
@@ -269,28 +387,43 @@ if __name__ == '__main__':
         print(f"Great! Now, please select enter the {len(chosen_pokemon) + 1}"
               f"{'st' if len(chosen_pokemon) == 0 else 'nd' if len(chosen_pokemon) == 1 else 'rd' if len(chosen_pokemon) == 2 else 'th'} "
               f"pokemon in your team.")
+        print("You can either enter the name of the pokemon, or enter one of the options below.")
         print("\tTo forbid a pokemon from being suggested, enter 'forbid <pokemon>'.")
-        print("\t1. If you would like to see the usage stats for the current format, enter 'usage' or 1.")
-        print("\t2. If you would like to see the viability ceiling for the current format, enter 'viability' or 2.")
-        print("\t3. If you would like some suggestions for the first pokemon in your team, enter 'suggestions' or 3.")
+        print("\tTo remove a pokemon from your team, enter 'remove <pokemon>'.")
+        print("\t1. If you would like some AI suggestions for the first pokemon in your team, enter 'suggestions' or 1.")
+        print("\t2. If you would like to generate a random team, enter 'random' or 2.")
+        print("\t3. If you would like to see the usage stats for the current format, enter 'usage' or 3.")
+        print("\t4. If you would like to see the viability ceiling for the current format, enter 'viability' or 4.")
         if suggested is not None:
-            print("\t4. If you would like to accept the (top) suggested team, enter 'accept' or 4.")
+            print("\t5. If you would like to accept the (top) suggested team, enter 'accept' or 5.")
         x = input("> ")
-        if x == "usage" or x == "1":
+        if x == "usage" or x == "3":
             print("Usage stats are not yet implemented.")
-        elif x == "viability" or x == "2":
+        elif x == "viability" or x == "4":
             print("Viability ceiling is not yet implemented.")
-        elif x == "suggestions" or x == "3":
+        elif x == "suggestions" or x == "1":
             print(f"Here are some suggestions for the first pokemon in your team:")
             suggested = run_model(tokenizer, model, chosen_pokemon, format, forbidden_pokemon=forbidden_pokemon)
-        elif x == "accept" or x == "4":
+        elif x == "accept" or x == "5":
             if suggested is not None:
                 chosen_pokemon = suggested
                 suggested = None
             else:
                 print("Ask for suggestions first.")
+        elif x == "random" or x == "2":
+            rand_team = None
+            while rand_team is None:
+                rand_team = generate_random_team(model, tokenizer, format, chosen_pokemon, forbidden_pokemon)
+                print(f"Here is a random team: {', '.join(rand_team)}")
+                print("Would you like to accept this team? (y/n)")
+                x = input("> ")
+                if x == "y":
+                    chosen_pokemon = rand_team
+                else:
+                    rand_team = None
         elif x.startswith("forbid"):
-            pokemon = x.split(" ")[1]
+            pokemon = x.split(" ")[1:]
+            pokemon = " ".join(pokemon)
             if pokemon in chosen_pokemon:
                 print(f"You have already chosen {pokemon}.")
             elif pokemon in forbidden_pokemon:
@@ -298,6 +431,14 @@ if __name__ == '__main__':
             else:
                 forbidden_pokemon.append(pokemon)
                 print(f"Forbidden {pokemon}.")
+        elif x.startswith("remove"):
+            pokemon = x.split(" ")[1:]
+            pokemon = " ".join(pokemon)
+            if pokemon in chosen_pokemon:
+                chosen_pokemon.remove(pokemon)
+                print(f"Removed {pokemon}.")
+            else:
+                print(f"{pokemon} is not in your team.")
         elif x in tokenizer.get_vocab():
             chosen_pokemon.append(x)
             suggested = None
@@ -307,8 +448,11 @@ if __name__ == '__main__':
     print()
     print(f"Your final team: {', '.join(chosen_pokemon)}")
     print()
-    print("Here are some suggestions for finalizing your team:")
     make_set_suggestion_team(format, chosen_pokemon)
-    print("Here is the viability of chosen team:")
     analyse_viability(chosen_pokemon, format)
+    win_prob = get_win_prob(model, tokenizer, chosen_pokemon, format)
+    team_prob = get_team_probability(model, tokenizer, chosen_pokemon, format)
+    print(f"CS: {team_prob * win_prob * np.power(10, 6):.0f}")
+    print(f"PS: {team_prob * np.power(10, 6):.0f}")
+    print(f"WS: {win_prob * 100:.0f}")
     print("\n\nThanks for using the interactive team builder!")

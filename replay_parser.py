@@ -1,6 +1,31 @@
 import os
 
 from data_classes import *
+from ban_lists import BAN_LISTS
+
+def name_corrections(name):
+    # remove mega from name
+    if "-Mega" in name:
+        name = name.split("-Mega")[0]
+    # Tauros name check
+    if name == "Tauros-Paldea-Fire":
+        name = "Tauros-Paldea-Blaze"
+    elif name == "Tauros-Paldea-Water":
+        name = "Tauros-Paldea-Aqua"
+    elif name == "Tauros-Paldea":
+        name = "Tauros-Paldea-Combat"
+    # Tatsugiri is always the same regardless of form
+    elif "Tatsugiri" in name:
+        name = "Tatsugiri"
+    # Florges is always the same regardless of form
+    elif "Florges" in name:
+        name = "Florges"
+    # Dudunsparce is always the same regardless of form
+    elif "Dudunsparce" in name:
+        name = "Dudunsparce"
+    elif "Gastrodon" in name:
+        name = "Gastrodon"
+    return name
 
 def parse_replay(format, replay_id):
     filepath = f'replays/{format}/{replay_id}.log'
@@ -44,6 +69,7 @@ def parse_replay(format, replay_id):
                     else:
                         name = split_line[3]
                         gender = None
+                    name = name_corrections(name)
                     poke = Pokemon(name, gender)
                     if "p1" in split_line:
                         p1.add_pokemon(poke)
@@ -118,6 +144,21 @@ def parse_replay(format, replay_id):
         print(f"ERROR: {replay_id} has no winner")
         # delete replay file
         os.remove(filepath)
+        return None
+
+    if len(p1.team) > 6 or len(p2.team) > 6:
+        print(f"ERROR: {replay_id} has more than 6 pokemon per team")
+        # delete replay file
+        os.remove(filepath)
+        return None
+
+
+    # check against bans
+    ban_list = BAN_LISTS[format] if format in BAN_LISTS else []
+    pokemon = [p.name for p in p1.team] + [p.name for p in p2.team]
+    intersection = set(pokemon).intersection(set(ban_list))
+    if len(intersection) > 0:
+        print(f"ERROR: {replay_id} has banned pokemon: {intersection}")
         return None
 
 

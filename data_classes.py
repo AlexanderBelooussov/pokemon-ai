@@ -49,6 +49,7 @@ class Player:
         return output
 
     def add_pokemon(self, pokemon: Pokemon):
+
         self.team.append(pokemon)
         lead = self.team[self.lead] if self.lead is not None else None
         self.team = sorted(self.team, key=lambda x: x.name)
