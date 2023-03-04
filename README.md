@@ -46,6 +46,7 @@ The formats are:
 * Gen 9 Ubers
 * Gen 9 UU
 * Gen 9 RU
+* Gen 9 National Dex Monotype
 
 ### Model
 The model that is used is [DeBERTa](https://huggingface.co/docs/transformers/main/en/model_doc/deberta#overview). The tokenizer is my own implementation which can be found in `battle_tokenizer.py`. It simply translates replay files into inputs which are fed to the model.
@@ -62,317 +63,379 @@ Training was done with a training set and an unmodified validation set. The vali
 
 [^1]: The masking process is the same as described in the BERT paper. Each token has a 15% chance of being selected for masking. If a token is selected, it is masked with a 80% chance, replaced with a random token with a 10% chance, or left unchanged with a 10% chance. This ensures that the model cannot assume that unmasked tokens are correct.
 
+Number of training samples: 2 * 103650 = 207250
 
-### Results
+### Results after pre-training
 Results were calculated on a held out test set.
 
-#### Predicting the winner[^2]
-
-[^2]: The current model does not score well when trying to predict the winner. Previous models based on DistilBERT achieved a weighted F1-score above 0.60, but some flaw prevents it from being a good recommender.
+#### Predicting the winner
 
 |              | precision | recall | f1-score | support |
 |--------------|-----------|--------|----------|---------|
-| P1 Win       | 0.43      | 0.42   | 0.42     | 2870    |
-| P2 Win       | 0.43      | 0.44   | 0.43     | 2873    |
+| P1 Win       | 0.66      | 0.64   | 0.65     | 4036    |
+| P2 Win       | 0.64      | 0.66   | 0.65     | 3867    |
 |              |           |        |          |         |
-| accuracy     |           |        | 0.43     | 5743    |
-| macro avg    | 0.43      | 0.43   | 0.43     | 5743    |
-| weighted avg | 0.43      | 0.43   | 0.43     | 5743    |
+| accuracy     |           |        | 0.65     | 7903    |
+| macro avg    | 0.65      | 0.65   | 0.65     | 7903    |
+| weighted avg | 0.65      | 0.65   | 0.65     | 7903    |
 
 #### Predicting the format
 
-|                    | precision | recall | f1-score | support |
-|--------------------|-----------|--------|----------|---------|
-| gen9doublesou      | 1.00      | 1.00   | 1.00     | 462     |
-| gen9monotype       | 1.00      | 1.00   | 1.00     | 357     |
-| gen9nationaldex    | 1.00      | 1.00   | 1.00     | 690     |
-| gen9ou             | 1.00      | 1.00   | 1.00     | 1692    |
-| gen9ru             | 1.00      | 1.00   | 1.00     | 348     |
-| gen9ubers          | 1.00      | 1.00   | 1.00     | 331     |
-| gen9uu             | 1.00      | 1.00   | 1.00     | 385     |
-| gen9vgc2023series1 | 1.00      | 0.99   | 1.00     | 1122    |
-| gen9vgc2023series2 | 0.98      | 1.00   | 0.99     | 356     |
-|                    |           |        |          |         |
-| accuracy           |           |        | 1.00     | 5743    |
-| macro avg          | 1.00      | 1.00   | 1.00     | 5743    |
-| weighted avg       | 1.00      | 1.00   | 1.00     | 5743    |
+|                         | precision | recall | f1-score | support |
+|-------------------------|-----------|--------|----------|---------|
+| gen9doublesou           | 0.90      | 0.99   | 0.94     | 549     |
+| gen9monotype            | 0.99      | 0.93   | 0.96     | 143     |
+| gen9nationaldex         | 0.98      | 0.98   | 0.98     | 1609    |
+| gen9nationaldexmonotype | 0.99      | 0.89   | 0.94     | 195     |
+| gen9ou                  | 0.99      | 0.98   | 0.98     | 1720    |
+| gen9ru                  | 0.98      | 0.99   | 0.99     | 118     |
+| gen9ubers               | 1.00      | 0.77   | 0.87     | 299     |
+| gen9uu                  | 1.00      | 0.98   | 0.99     | 215     |
+| gen9vgc2023series1      | 0.92      | 0.98   | 0.95     | 584     |
+| gen9vgc2023series2      | 0.98      | 0.99   | 0.98     | 2471    |
+|                         |           |        |          |         |
+| accuracy                |           |        | 0.97     | 7903    |
+| macro avg               | 0.97      | 0.95   | 0.96     | 7903    |
+| weighted avg            | 0.97      | 0.97   | 0.97     | 7903    |
 
 #### Predicting the Pokemon in the first slot
 
-|                       | precision | recall | f1-score | support |
-|-----------------------|-----------|--------|----------|---------|
-| Abomasnow             | 0.99      | 0.97   | 0.98     | 169     |
-| Abra                  | 0.00      | 0.00   | 0.00     | 2       |
-| Absol                 | 0.00      | 0.00   | 0.00     | 4       |
-| Accelgor              | 0.00      | 0.00   | 0.00     | 4       |
-| Aegislash             | 1.00      | 1.00   | 1.00     | 7       |
-| Aerodactyl            | 0.00      | 0.00   | 0.00     | 12      |
-| Aggron                | 1.00      | 0.17   | 0.29     | 18      |
-| Alakazam              | 0.00      | 0.00   | 0.00     | 8       |
-| Alomomola             | 1.00      | 1.00   | 1.00     | 49      |
-| Altaria               | 1.00      | 1.00   | 1.00     | 53      |
-| Altaria-Mega          | 0.00      | 0.00   | 0.00     | 1       |
-| Ambipom               | 0.00      | 0.00   | 0.00     | 5       |
-| Amoonguss             | 0.99      | 1.00   | 1.00     | 581     |
-| Ampharos              | 1.00      | 0.26   | 0.42     | 19      |
-| Annihilape            | 0.98      | 1.00   | 0.99     | 421     |
-| Appletun              | 1.00      | 0.91   | 0.95     | 22      |
-| Applin                | 0.00      | 0.00   | 0.00     | 1       |
-| Araquanid             | 0.00      | 0.00   | 0.00     | 2       |
-| Arbok                 | 1.00      | 0.60   | 0.75     | 5       |
-| Arboliva              | 1.00      | 0.99   | 1.00     | 123     |
-| Arcanine              | 0.96      | 1.00   | 0.98     | 126     |
-| Arcanine-Hisui        | 0.00      | 0.00   | 0.00     | 1       |
-| Arctibax              | 0.00      | 0.00   | 0.00     | 1       |
-| Arctovish             | 0.00      | 0.00   | 0.00     | 1       |
-| Arctozolt             | 1.00      | 0.50   | 0.67     | 2       |
-| Ariados               | 0.00      | 0.00   | 0.00     | 1       |
-| Armarouge             | 0.95      | 1.00   | 0.98     | 299     |
-| Aron                  | 0.00      | 0.00   | 0.00     | 4       |
-| Articuno-Galar        | 0.00      | 0.00   | 0.00     | 2       |
-| Audino                | 0.00      | 0.00   | 0.00     | 1       |
-| Avalugg               | 0.98      | 0.98   | 0.98     | 43      |
-| Axew                  | 0.00      | 0.00   | 0.00     | 2       |
-| Azelf                 | 0.00      | 0.00   | 0.00     | 3       |
-| Azumarill             | 0.96      | 1.00   | 0.98     | 172     |
-| Banette               | 1.00      | 0.56   | 0.71     | 9       |
-| Barraskewda           | 1.00      | 0.98   | 0.99     | 66      |
-| Basculin              | 0.00      | 0.00   | 0.00     | 8       |
-| Basculin-Blue-Striped | 0.00      | 0.00   | 0.00     | 4       |
-| Baxcalibur            | 1.00      | 1.00   | 1.00     | 260     |
-| Beartic               | 1.00      | 1.00   | 1.00     | 11      |
-| Beedrill              | 1.00      | 1.00   | 1.00     | 13      |
-| Bellibolt             | 1.00      | 1.00   | 1.00     | 36      |
-| Bewear                | 1.00      | 0.33   | 0.50     | 3       |
-| Binacle               | 0.00      | 0.00   | 0.00     | 1       |
-| Bisharp               | 0.97      | 1.00   | 0.98     | 56      |
-| Blacephalon           | 1.00      | 0.50   | 0.67     | 8       |
-| Blastoise             | 0.00      | 0.00   | 0.00     | 1       |
-| Blaziken              | 1.00      | 0.38   | 0.55     | 8       |
-| Blissey               | 0.97      | 1.00   | 0.98     | 64      |
-| Bombirdier            | 0.96      | 1.00   | 0.98     | 24      |
-| Bouffalant            | 0.00      | 0.00   | 0.00     | 2       |
-| Brambleghast          | 1.00      | 0.98   | 0.99     | 48      |
-| Braviary              | 1.00      | 0.83   | 0.91     | 18      |
-| Breloom               | 1.00      | 0.99   | 1.00     | 172     |
-| Bronzong              | 0.96      | 1.00   | 0.98     | 45      |
-| Bronzor               | 0.00      | 0.00   | 0.00     | 2       |
-| Brute Bonnet          | 1.00      | 1.00   | 1.00     | 83      |
-| Bruxish               | 1.00      | 0.92   | 0.96     | 13      |
-| Bulbasaur             | 0.00      | 0.00   | 0.00     | 1       |
-| Bunnelby              | 1.00      | 1.00   | 1.00     | 1       |
-| Buzzwole              | 0.00      | 0.00   | 0.00     | 3       |
-| Cacnea                | 0.00      | 0.00   | 0.00     | 1       |
-| Cacturne              | 1.00      | 0.27   | 0.43     | 11      |
-| Camerupt              | 0.00      | 0.00   | 0.00     | 9       |
-| Carbink               | 1.00      | 0.50   | 0.67     | 4       |
-| Carkol                | 0.00      | 0.00   | 0.00     | 2       |
-| Carracosta            | 0.00      | 0.00   | 0.00     | 2       |
-| Celebi                | 0.00      | 0.00   | 0.00     | 2       |
-| Celesteela            | 1.00      | 0.43   | 0.60     | 7       |
-| Ceruledge             | 0.99      | 1.00   | 0.99     | 186     |
-| Cetitan               | 1.00      | 1.00   | 1.00     | 30      |
-| Chandelure            | 1.00      | 1.00   | 1.00     | 2       |
-| Chansey               | 0.96      | 1.00   | 0.98     | 22      |
-| Charizard             | 1.00      | 1.00   | 1.00     | 62      |
-| Chi-Yu                | 0.99      | 1.00   | 1.00     | 102     |
-| Chien-Pao             | 0.99      | 1.00   | 1.00     | 270     |
-| Cinderace             | 0.99      | 1.00   | 1.00     | 114     |
-| Clauncher             | 0.00      | 0.00   | 0.00     | 1       |
-| Clawitzer             | 1.00      | 0.93   | 0.97     | 15      |
-| Claydol               | 0.00      | 0.00   | 0.00     | 1       |
-| Clefable              | 1.00      | 1.00   | 1.00     | 10      |
-| Clodsire              | 0.99      | 1.00   | 0.99     | 161     |
-| Cloyster              | 1.00      | 1.00   | 1.00     | 39      |
-| Coalossal             | 1.00      | 0.90   | 0.95     | 20      |
-| Cobalion              | 0.00      | 0.00   | 0.00     | 2       |
-| Cofagrigus            | 1.00      | 1.00   | 1.00     | 1       |
-| Combee                | 0.00      | 0.00   | 0.00     | 1       |
-| Comfey                | 1.00      | 0.50   | 0.67     | 2       |
-| Conkeldurr            | 0.00      | 0.00   | 0.00     | 1       |
-| Copperajah            | 1.00      | 1.00   | 1.00     | 4       |
-| Corsola               | 0.00      | 0.00   | 0.00     | 1       |
-| Corsola-Galar         | 0.00      | 0.00   | 0.00     | 3       |
-| Corviknight           | 0.95      | 1.00   | 0.97     | 140     |
-| Crabominable          | 1.00      | 1.00   | 1.00     | 3       |
-| Crabrawler            | 0.00      | 0.00   | 0.00     | 1       |
-| Cradily               | 0.00      | 0.00   | 0.00     | 1       |
-| Crawdaunt             | 0.50      | 0.33   | 0.40     | 3       |
-| Cresselia             | 0.00      | 0.00   | 0.00     | 9       |
-| Crobat                | 0.00      | 0.00   | 0.00     | 3       |
-| Crocalor              | 0.00      | 0.00   | 0.00     | 2       |
-| Crustle               | 1.00      | 0.75   | 0.86     | 4       |
-| Cryogonal             | 1.00      | 1.00   | 1.00     | 8       |
-| Cutiefly              | 0.00      | 0.00   | 0.00     | 1       |
-| Cyclizar              | 0.98      | 1.00   | 0.99     | 50      |
-| Dachsbun              | 0.85      | 0.94   | 0.89     | 18      |
-| Decidueye             | 0.00      | 0.00   | 0.00     | 1       |
-| Decidueye-Hisui       | 0.00      | 0.00   | 0.00     | 1       |
-| Dedenne               | 1.00      | 1.00   | 1.00     | 6       |
-| Delibird              | 0.00      | 0.00   | 0.00     | 8       |
-| Deoxys-Defense        | 0.00      | 0.00   | 0.00     | 1       |
-| Dhelmise              | 0.00      | 0.00   | 0.00     | 1       |
-| Diancie               | 0.95      | 1.00   | 0.98     | 20      |
-| Diggersby             | 0.00      | 0.00   | 0.00     | 1       |
-| Ditto                 | 0.96      | 1.00   | 0.98     | 25      |
-| Dondozo               | 0.97      | 1.00   | 0.99     | 78      |
-| Donphan               | 1.00      | 1.00   | 1.00     | 30      |
-| Dracozolt             | 0.00      | 0.00   | 0.00     | 3       |
-| Dragalge              | 1.00      | 1.00   | 1.00     | 6       |
-| Dragapult             | 0.88      | 1.00   | 0.94     | 103     |
-| Dragonair             | 0.00      | 0.00   | 0.00     | 2       |
-| Dragonite             | 0.98      | 1.00   | 0.99     | 105     |
-| Drakloak              | 0.00      | 0.00   | 0.00     | 1       |
-| Drapion               | 1.00      | 0.25   | 0.40     | 4       |
-| Drednaw               | 1.00      | 1.00   | 1.00     | 12      |
-| Drifblim              | 1.00      | 1.00   | 1.00     | 13      |
-| Drifloon              | 0.00      | 0.00   | 0.00     | 1       |
-| Dudunsparce-*         | 1.00      | 1.00   | 1.00     | 18      |
-| Dugtrio               | 0.00      | 0.00   | 0.00     | 6       |
-| Dunsparce             | 1.00      | 1.00   | 1.00     | 1       |
-| Eelektrik             | 0.00      | 0.00   | 0.00     | 1       |
-| Eelektross            | 1.00      | 1.00   | 1.00     | 8       |
-| Electivire            | 1.00      | 0.14   | 0.25     | 7       |
-| Electrode             | 0.00      | 0.00   | 0.00     | 2       |
-| Enamorus-Therian      | 0.00      | 0.00   | 0.00     | 2       |
-| Espathra              | 1.00      | 1.00   | 1.00     | 15      |
-| Espeon                | 0.97      | 1.00   | 0.99     | 34      |
-| Excadrill             | 1.00      | 0.50   | 0.67     | 6       |
-| Exeggutor             | 0.00      | 0.00   | 0.00     | 2       |
-| Falinks               | 0.00      | 0.00   | 0.00     | 1       |
-| Farigiraf             | 0.89      | 1.00   | 0.94     | 25      |
-| Feraligatr            | 0.00      | 0.00   | 0.00     | 1       |
-| Ferrothorn            | 0.88      | 1.00   | 0.93     | 21      |
-| Fidough               | 0.00      | 0.00   | 0.00     | 2       |
-| Flamigo               | 0.97      | 1.00   | 0.98     | 29      |
-| Flapple               | 0.00      | 0.00   | 0.00     | 1       |
-| Flareon               | 1.00      | 1.00   | 1.00     | 1       |
-| Flittle               | 0.00      | 0.00   | 0.00     | 1       |
-| Floatzel              | 1.00      | 1.00   | 1.00     | 21      |
-| Florges               | 1.00      | 1.00   | 1.00     | 9       |
-| Florges-Blue          | 0.00      | 0.00   | 0.00     | 1       |
-| Florges-White         | 1.00      | 0.17   | 0.29     | 6       |
-| Flutter Mane          | 0.97      | 1.00   | 0.98     | 61      |
-| Fomantis              | 0.00      | 0.00   | 0.00     | 2       |
-| Forretress            | 1.00      | 1.00   | 1.00     | 30      |
-| Froslass              | 1.00      | 1.00   | 1.00     | 7       |
-| Frosmoth              | 1.00      | 1.00   | 1.00     | 7       |
-| Fuecoco               | 0.00      | 0.00   | 0.00     | 2       |
-| Gabite                | 1.00      | 0.50   | 0.67     | 2       |
-| Gallade               | 0.91      | 1.00   | 0.96     | 32      |
-| Galvantula            | 0.00      | 0.00   | 0.00     | 1       |
-| Garchomp              | 0.99      | 1.00   | 0.99     | 87      |
-| Gardevoir             | 0.93      | 1.00   | 0.97     | 14      |
-| Garganacl             | 0.92      | 1.00   | 0.96     | 35      |
-| Gastly                | 0.00      | 0.00   | 0.00     | 1       |
-| Gastrodon             | 1.00      | 1.00   | 1.00     | 16      |
-| Gastrodon-East        | 1.00      | 1.00   | 1.00     | 5       |
-| Gengar                | 1.00      | 1.00   | 1.00     | 15      |
-| Gholdengo             | 0.90      | 1.00   | 0.95     | 70      |
-| Glaceon               | 1.00      | 1.00   | 1.00     | 4       |
-| Glalie                | 1.00      | 0.50   | 0.67     | 2       |
-| Glimmet               | 1.00      | 0.50   | 0.67     | 2       |
-| Glimmora              | 0.42      | 1.00   | 0.59     | 13      |
-| Gliscor               | 1.00      | 1.00   | 1.00     | 2       |
-| Gogoat                | 1.00      | 1.00   | 1.00     | 1       |
-| Golduck               | 1.00      | 1.00   | 1.00     | 1       |
-| Goodra                | 1.00      | 1.00   | 1.00     | 4       |
-| Grafaiai              | 1.00      | 1.00   | 1.00     | 11      |
-| Great Tusk            | 0.80      | 1.00   | 0.89     | 32      |
-| Greninja              | 0.40      | 1.00   | 0.57     | 2       |
-| Grimmsnarl            | 0.81      | 1.00   | 0.90     | 22      |
-| Gumshoos              | 0.00      | 0.00   | 0.00     | 2       |
-| Gyarados              | 1.00      | 1.00   | 1.00     | 7       |
-| Hariyama              | 0.83      | 1.00   | 0.91     | 5       |
-| Hatterene             | 0.86      | 1.00   | 0.92     | 6       |
-| Hawlucha              | 1.00      | 1.00   | 1.00     | 3       |
-| Haxorus               | 0.62      | 1.00   | 0.76     | 8       |
-| Heatran               | 0.12      | 1.00   | 0.21     | 2       |
-| Heracross             | 1.00      | 1.00   | 1.00     | 2       |
-| Honchkrow             | 1.00      | 1.00   | 1.00     | 1       |
-| Houndoom              | 0.00      | 0.00   | 0.00     | 2       |
-| Houndstone            | 0.78      | 1.00   | 0.88     | 7       |
-| Hydreigon             | 0.50      | 1.00   | 0.67     | 4       |
-| Indeedee              | 1.00      | 1.00   | 1.00     | 1       |
-| Indeedee-F            | 0.75      | 1.00   | 0.86     | 3       |
-| Iron Bundle           | 0.75      | 1.00   | 0.86     | 6       |
-| Iron Hands            | 1.00      | 1.00   | 1.00     | 9       |
-| Iron Jugulis          | 1.00      | 1.00   | 1.00     | 3       |
-| Iron Moth             | 0.75      | 1.00   | 0.86     | 3       |
-| Iron Thorns           | 1.00      | 1.00   | 1.00     | 4       |
-| Iron Treads           | 1.00      | 1.00   | 1.00     | 3       |
-| Iron Valiant          | 0.50      | 1.00   | 0.67     | 3       |
-| Jigglypuff            | 0.00      | 0.00   | 0.00     | 1       |
-| Jirachi               | 1.00      | 1.00   | 1.00     | 1       |
-| Jolteon               | 1.00      | 1.00   | 1.00     | 4       |
-| Kartana               | 1.00      | 1.00   | 1.00     | 4       |
-| Kecleon               | 0.00      | 0.00   | 0.00     | 2       |
-| Kilowattrel           | 0.67      | 1.00   | 0.80     | 4       |
-| Kingambit             | 0.13      | 1.00   | 0.24     | 2       |
-| Kingdra               | 1.00      | 0.50   | 0.67     | 2       |
-| Klefki                | 1.00      | 1.00   | 1.00     | 2       |
-| Komala                | 1.00      | 1.00   | 1.00     | 1       |
-| Koraidon              | 0.00      | 0.00   | 0.00     | 0       |
-| Krookodile            | 1.00      | 1.00   | 1.00     | 2       |
-| Landorus-Therian      | 0.25      | 1.00   | 0.40     | 1       |
-| Lilligant             | 0.00      | 0.00   | 0.00     | 0       |
-| Lokix                 | 1.00      | 1.00   | 1.00     | 6       |
-| Luxray                | 0.00      | 0.00   | 0.00     | 1       |
-| Mabosstiff            | 1.00      | 1.00   | 1.00     | 1       |
-| Magby                 | 0.00      | 0.00   | 0.00     | 0       |
-| Magnemite             | 0.00      | 0.00   | 0.00     | 1       |
-| Magneton              | 1.00      | 1.00   | 1.00     | 5       |
-| Magnezone             | 1.00      | 1.00   | 1.00     | 2       |
-| Marowak-Alola         | 0.00      | 0.00   | 0.00     | 0       |
-| Maushold              | 1.00      | 1.00   | 1.00     | 1       |
-| Maushold-Four         | 1.00      | 1.00   | 1.00     | 4       |
-| Meowscarada           | 0.33      | 1.00   | 0.50     | 4       |
-| Mimikyu               | 1.00      | 1.00   | 1.00     | 1       |
-| Miraidon              | 0.00      | 0.00   | 0.00     | 0       |
-| Morgrem               | 0.00      | 0.00   | 0.00     | 1       |
-| Mudsdale              | 1.00      | 1.00   | 1.00     | 1       |
-| Muk-Alola             | 0.00      | 0.00   | 0.00     | 1       |
-| Murkrow               | 0.50      | 1.00   | 0.67     | 1       |
-| Nacli                 | 0.00      | 0.00   | 0.00     | 1       |
-| Octillery             | 1.00      | 1.00   | 1.00     | 5       |
-| Oricorio-Pom-Pom      | 1.00      | 1.00   | 1.00     | 1       |
-| Oricorio-Sensu        | 1.00      | 1.00   | 1.00     | 1       |
-| Orthworm              | 0.25      | 1.00   | 0.40     | 2       |
-| Palafin               | 1.00      | 1.00   | 1.00     | 1       |
-| Palossand             | 0.00      | 0.00   | 0.00     | 0       |
-| Pawmi                 | 1.00      | 1.00   | 1.00     | 2       |
-| Pelipper              | 0.00      | 0.00   | 0.00     | 0       |
-| Primeape              | 0.00      | 0.00   | 0.00     | 0       |
-| Quaquaval             | 0.00      | 0.00   | 0.00     | 0       |
-| Rabsca                | 0.00      | 0.00   | 0.00     | 0       |
-| Rillaboom             | 0.00      | 0.00   | 0.00     | 0       |
-| Roaring Moon          | 0.00      | 0.00   | 0.00     | 1       |
-| Rookidee              | 1.00      | 1.00   | 1.00     | 1       |
-| Rotom-Wash            | 0.00      | 0.00   | 0.00     | 0       |
-| Sandy Shocks          | 0.17      | 1.00   | 0.29     | 1       |
-| Scizor                | 0.00      | 0.00   | 0.00     | 0       |
-| Scovillain            | 0.00      | 0.00   | 0.00     | 0       |
-| Skarmory              | 0.00      | 0.00   | 0.00     | 0       |
-| Skeledirge            | 0.00      | 0.00   | 0.00     | 0       |
-| Spinda                | 0.00      | 0.00   | 0.00     | 2       |
-| Spiritomb             | 1.00      | 1.00   | 1.00     | 1       |
-| Staryu                | 0.00      | 0.00   | 0.00     | 0       |
-| Sudowoodo             | 0.00      | 0.00   | 0.00     | 1       |
-| Swampert              | 0.00      | 0.00   | 0.00     | 0       |
-| Sylveon               | 0.00      | 0.00   | 0.00     | 0       |
-| Talonflame            | 0.00      | 0.00   | 0.00     | 0       |
-| Tapu Fini             | 1.00      | 1.00   | 1.00     | 1       |
-| Tapu Koko             | 0.00      | 0.00   | 0.00     | 0       |
-| Tauros-Paldea-Fire    | 1.00      | 1.00   | 1.00     | 1       |
-| Tauros-Paldea-Water   | 0.00      | 0.00   | 0.00     | 0       |
-| Tinkaton              | 0.00      | 0.00   | 0.00     | 0       |
-| Torkoal               | 0.00      | 0.00   | 0.00     | 0       |
-| Tornadus-Therian      | 0.00      | 0.00   | 0.00     | 0       |
-| Toxapex               | 0.00      | 0.00   | 0.00     | 0       |
-| Toxtricity            | 0.00      | 0.00   | 0.00     | 0       |
-| Venusaur              | 0.00      | 0.00   | 0.00     | 0       |
-| Volcarona             | 0.00      | 0.00   | 0.00     | 0       |
-|                       |           |        |          |         |
-| accuracy              |           |        | 0.95     | 5743    |
-| macro avg             | 0.55      | 0.54   | 0.53     | 5743    |
-| weighted avg          | 0.94      | 0.95   | 0.94     | 5743    |
+|                        | precision | recall | f1-score | support |
+|------------------------|-----------|--------|----------|---------|
+| Abomasnow              | 1.00      | 0.99   | 1.00     | 163     |
+| Abra                   | 1.00      | 1.00   | 1.00     | 1       |
+| Absol                  | 1.00      | 1.00   | 1.00     | 12      |
+| Accelgor               | 0.00      | 0.00   | 0.00     | 1       |
+| Aegislash              | 1.00      | 0.99   | 0.99     | 67      |
+| Aerodactyl             | 1.00      | 0.88   | 0.94     | 25      |
+| Aggron                 | 1.00      | 0.96   | 0.98     | 24      |
+| Alakazam               | 1.00      | 0.80   | 0.89     | 15      |
+| Alcremie               | 0.00      | 0.00   | 0.00     | 1       |
+| Alcremie-Lemon-Cream   | 0.00      | 0.00   | 0.00     | 1       |
+| Alcremie-Rainbow-Swirl | 0.00      | 0.00   | 0.00     | 1       |
+| Alcremie-Ruby-Cream    | 0.00      | 0.00   | 0.00     | 1       |
+| Alcremie-Salted-Cream  | 1.00      | 1.00   | 1.00     | 2       |
+| Alomomola              | 1.00      | 0.74   | 0.85     | 74      |
+| Altaria                | 0.93      | 0.93   | 0.93     | 59      |
+| Ambipom                | 1.00      | 1.00   | 1.00     | 6       |
+| Amoonguss              | 1.00      | 1.00   | 1.00     | 1039    |
+| Ampharos               | 1.00      | 0.77   | 0.87     | 39      |
+| Annihilape             | 1.00      | 1.00   | 1.00     | 441     |
+| Appletun               | 1.00      | 0.90   | 0.95     | 29      |
+| Araquanid              | 1.00      | 1.00   | 1.00     | 25      |
+| Arboliva               | 0.99      | 1.00   | 1.00     | 134     |
+| Arcanine               | 0.96      | 1.00   | 0.98     | 312     |
+| Arcanine-Hisui         | 0.00      | 0.00   | 0.00     | 2       |
+| Archeops               | 0.00      | 0.00   | 0.00     | 3       |
+| Arctovish              | 1.00      | 0.67   | 0.80     | 3       |
+| Arctozolt              | 1.00      | 0.36   | 0.53     | 11      |
+| Ariados                | 1.00      | 1.00   | 1.00     | 1       |
+| Armaldo                | 1.00      | 0.67   | 0.80     | 6       |
+| Armarouge              | 0.94      | 1.00   | 0.97     | 417     |
+| Aron                   | 1.00      | 0.40   | 0.57     | 5       |
+| Arrokuda               | 0.00      | 0.00   | 0.00     | 1       |
+| Articuno               | 0.00      | 0.00   | 0.00     | 2       |
+| Articuno-Galar         | 0.00      | 0.00   | 0.00     | 1       |
+| Audino                 | 1.00      | 0.50   | 0.67     | 2       |
+| Aurorus                | 1.00      | 0.50   | 0.67     | 2       |
+| Avalugg                | 1.00      | 0.77   | 0.87     | 35      |
+| Avalugg-Hisui          | 0.00      | 0.00   | 0.00     | 1       |
+| Azelf                  | 0.00      | 0.00   | 0.00     | 5       |
+| Azumarill              | 1.00      | 1.00   | 1.00     | 189     |
+| Banette                | 1.00      | 0.95   | 0.98     | 21      |
+| Barraskewda            | 1.00      | 0.96   | 0.98     | 68      |
+| Basculegion            | 0.00      | 0.00   | 0.00     | 3       |
+| Basculin               | 0.00      | 0.00   | 0.00     | 5       |
+| Basculin-Blue-Striped  | 1.00      | 1.00   | 1.00     | 1       |
+| Bastiodon              | 0.00      | 0.00   | 0.00     | 2       |
+| Baxcalibur             | 1.00      | 1.00   | 1.00     | 277     |
+| Beartic                | 1.00      | 0.87   | 0.93     | 15      |
+| Beedrill               | 1.00      | 1.00   | 1.00     | 26      |
+| Beheeyem               | 0.00      | 0.00   | 0.00     | 3       |
+| Bellibolt              | 1.00      | 0.88   | 0.94     | 42      |
+| Bellossom              | 0.00      | 0.00   | 0.00     | 1       |
+| Bewear                 | 1.00      | 0.86   | 0.92     | 7       |
+| Bibarel                | 0.00      | 0.00   | 0.00     | 1       |
+| Bisharp                | 1.00      | 0.91   | 0.95     | 64      |
+| Blacephalon            | 1.00      | 1.00   | 1.00     | 16      |
+| Blastoise              | 1.00      | 0.92   | 0.96     | 13      |
+| Blaziken               | 1.00      | 1.00   | 1.00     | 37      |
+| Blipbug                | 0.00      | 0.00   | 0.00     | 1       |
+| Blissey                | 1.00      | 0.97   | 0.98     | 59      |
+| Boltund                | 0.00      | 0.00   | 0.00     | 1       |
+| Bombirdier             | 1.00      | 0.89   | 0.94     | 27      |
+| Bonsly                 | 0.00      | 0.00   | 0.00     | 1       |
+| Brambleghast           | 1.00      | 0.91   | 0.95     | 54      |
+| Bramblin               | 0.00      | 0.00   | 0.00     | 3       |
+| Braviary               | 1.00      | 0.93   | 0.96     | 14      |
+| Breloom                | 1.00      | 0.99   | 0.99     | 179     |
+| Bronzong               | 1.00      | 0.95   | 0.97     | 40      |
+| Brute Bonnet           | 0.99      | 0.99   | 0.99     | 172     |
+| Bruxish                | 1.00      | 0.50   | 0.67     | 12      |
+| Buizel                 | 0.00      | 0.00   | 0.00     | 1       |
+| Bulbasaur              | 0.00      | 0.00   | 0.00     | 1       |
+| Butterfree             | 1.00      | 0.75   | 0.86     | 4       |
+| Buzzwole               | 1.00      | 0.93   | 0.97     | 15      |
+| Cacnea                 | 0.00      | 0.00   | 0.00     | 1       |
+| Cacturne               | 1.00      | 0.29   | 0.44     | 7       |
+| Camerupt               | 1.00      | 0.88   | 0.93     | 16      |
+| Carbink                | 0.00      | 0.00   | 0.00     | 2       |
+| Carkol                 | 0.00      | 0.00   | 0.00     | 1       |
+| Carracosta             | 0.00      | 0.00   | 0.00     | 1       |
+| Castform               | 0.00      | 0.00   | 0.00     | 2       |
+| Celebi                 | 0.00      | 0.00   | 0.00     | 5       |
+| Celesteela             | 1.00      | 1.00   | 1.00     | 25      |
+| Centiskorch            | 0.00      | 0.00   | 0.00     | 2       |
+| Ceruledge              | 0.95      | 1.00   | 0.98     | 225     |
+| Cetitan                | 1.00      | 0.96   | 0.98     | 27      |
+| Cetoddle               | 1.00      | 0.67   | 0.80     | 3       |
+| Chandelure             | 1.00      | 1.00   | 1.00     | 6       |
+| Chansey                | 1.00      | 0.90   | 0.95     | 31      |
+| Charizard              | 0.99      | 1.00   | 1.00     | 137     |
+| Charmeleon             | 0.00      | 0.00   | 0.00     | 2       |
+| Chesnaught             | 0.00      | 0.00   | 0.00     | 1       |
+| Chewtle                | 1.00      | 1.00   | 1.00     | 1       |
+| Chi-Yu                 | 0.95      | 1.00   | 0.97     | 55      |
+| Chien-Pao              | 1.00      | 0.97   | 0.99     | 34      |
+| Cinccino               | 0.00      | 0.00   | 0.00     | 3       |
+| Cinderace              | 0.90      | 1.00   | 0.95     | 162     |
+| Clauncher              | 0.00      | 0.00   | 0.00     | 1       |
+| Clawitzer              | 1.00      | 0.93   | 0.96     | 14      |
+| Claydol                | 0.00      | 0.00   | 0.00     | 2       |
+| Clefable               | 1.00      | 1.00   | 1.00     | 25      |
+| Clefairy               | 0.00      | 0.00   | 0.00     | 1       |
+| Clodsire               | 0.99      | 1.00   | 1.00     | 198     |
+| Cloyster               | 0.95      | 0.91   | 0.93     | 23      |
+| Coalossal              | 1.00      | 0.97   | 0.98     | 29      |
+| Cobalion               | 1.00      | 0.33   | 0.50     | 6       |
+| Cofagrigus             | 1.00      | 0.83   | 0.91     | 6       |
+| Combusken              | 0.00      | 0.00   | 0.00     | 1       |
+| Comfey                 | 1.00      | 1.00   | 1.00     | 5       |
+| Conkeldurr             | 1.00      | 1.00   | 1.00     | 6       |
+| Copperajah             | 1.00      | 0.60   | 0.75     | 10      |
+| Corsola                | 0.00      | 0.00   | 0.00     | 2       |
+| Corsola-Galar          | 1.00      | 1.00   | 1.00     | 4       |
+| Corviknight            | 0.98      | 1.00   | 0.99     | 213     |
+| Corvisquire            | 0.00      | 0.00   | 0.00     | 1       |
+| Cottonee               | 0.00      | 0.00   | 0.00     | 1       |
+| Crabominable           | 1.00      | 1.00   | 1.00     | 4       |
+| Crabrawler             | 0.00      | 0.00   | 0.00     | 1       |
+| Cradily                | 1.00      | 0.75   | 0.86     | 4       |
+| Cramorant              | 0.00      | 0.00   | 0.00     | 1       |
+| Crawdaunt              | 1.00      | 1.00   | 1.00     | 4       |
+| Cresselia              | 1.00      | 0.89   | 0.94     | 9       |
+| Crobat                 | 1.00      | 0.86   | 0.92     | 7       |
+| Crocalor               | 1.00      | 0.20   | 0.33     | 5       |
+| Crustle                | 1.00      | 1.00   | 1.00     | 2       |
+| Cryogonal              | 1.00      | 0.93   | 0.96     | 14      |
+| Cubchoo                | 1.00      | 1.00   | 1.00     | 1       |
+| Cyclizar               | 0.96      | 1.00   | 0.98     | 75      |
+| Dachsbun               | 1.00      | 0.87   | 0.93     | 15      |
+| Darmanitan             | 0.67      | 0.67   | 0.67     | 6       |
+| Decidueye              | 1.00      | 0.20   | 0.33     | 5       |
+| Dedenne                | 1.00      | 0.67   | 0.80     | 12      |
+| Delcatty               | 0.00      | 0.00   | 0.00     | 1       |
+| Delibird               | 1.00      | 0.33   | 0.50     | 3       |
+| Delphox                | 0.00      | 0.00   | 0.00     | 2       |
+| Deoxys-Defense         | 1.00      | 0.67   | 0.80     | 3       |
+| Deoxys-Speed           | 0.00      | 0.00   | 0.00     | 2       |
+| Dhelmise               | 0.00      | 0.00   | 0.00     | 1       |
+| Diancie                | 0.95      | 1.00   | 0.97     | 36      |
+| Diggersby              | 1.00      | 0.17   | 0.29     | 6       |
+| Ditto                  | 1.00      | 1.00   | 1.00     | 30      |
+| Dondozo                | 1.00      | 0.99   | 1.00     | 142     |
+| Donphan                | 0.92      | 1.00   | 0.96     | 12      |
+| Dracozolt              | 1.00      | 1.00   | 1.00     | 3       |
+| Dragalge               | 1.00      | 0.94   | 0.97     | 16      |
+| Dragapult              | 0.99      | 1.00   | 1.00     | 185     |
+| Dragonite              | 0.99      | 1.00   | 1.00     | 199     |
+| Drapion                | 1.00      | 1.00   | 1.00     | 1       |
+| Drednaw                | 1.00      | 0.85   | 0.92     | 20      |
+| Drifblim               | 1.00      | 0.94   | 0.97     | 16      |
+| Drifloon               | 1.00      | 1.00   | 1.00     | 1       |
+| Druddigon              | 0.00      | 0.00   | 0.00     | 2       |
+| Dubwool                | 0.00      | 0.00   | 0.00     | 2       |
+| Dudunsparce            | 1.00      | 1.00   | 1.00     | 15      |
+| Dugtrio                | 1.00      | 0.33   | 0.50     | 6       |
+| Dugtrio-Alola          | 0.00      | 0.00   | 0.00     | 1       |
+| Dunsparce              | 1.00      | 0.50   | 0.67     | 2       |
+| Durant                 | 1.00      | 0.67   | 0.80     | 3       |
+| Dusknoir               | 0.00      | 0.00   | 0.00     | 2       |
+| Eelektrik              | 0.00      | 0.00   | 0.00     | 2       |
+| Eelektross             | 1.00      | 0.90   | 0.95     | 10      |
+| Eevee                  | 0.00      | 0.00   | 0.00     | 2       |
+| Eiscue                 | 1.00      | 0.67   | 0.80     | 3       |
+| Electivire             | 1.00      | 0.92   | 0.96     | 12      |
+| Electrode              | 1.00      | 0.70   | 0.82     | 10      |
+| Empoleon               | 1.00      | 0.75   | 0.86     | 4       |
+| Enamorus               | 0.00      | 0.00   | 0.00     | 2       |
+| Escavalier             | 0.00      | 0.00   | 0.00     | 1       |
+| Espathra               | 1.00      | 1.00   | 1.00     | 30      |
+| Espeon                 | 1.00      | 1.00   | 1.00     | 43      |
+| Excadrill              | 1.00      | 1.00   | 1.00     | 13      |
+| Exeggutor              | 1.00      | 1.00   | 1.00     | 1       |
+| Falinks                | 0.00      | 0.00   | 0.00     | 4       |
+| Farigiraf              | 0.96      | 1.00   | 0.98     | 46      |
+| Feraligatr             | 1.00      | 0.75   | 0.86     | 4       |
+| Ferrothorn             | 0.96      | 1.00   | 0.98     | 54      |
+| Finizen                | 1.00      | 1.00   | 1.00     | 1       |
+| Flamigo                | 1.00      | 1.00   | 1.00     | 22      |
+| Flapple                | 0.00      | 0.00   | 0.00     | 2       |
+| Flareon                | 1.00      | 1.00   | 1.00     | 1       |
+| Fletchinder            | 0.00      | 0.00   | 0.00     | 2       |
+| Flittle                | 0.00      | 0.00   | 0.00     | 2       |
+| Floatzel               | 0.92      | 0.96   | 0.94     | 23      |
+| Florges                | 1.00      | 1.00   | 1.00     | 14      |
+| Flutter Mane           | 0.99      | 1.00   | 1.00     | 136     |
+| Flygon                 | 1.00      | 1.00   | 1.00     | 1       |
+| Forretress             | 1.00      | 0.97   | 0.98     | 30      |
+| Froakie                | 0.00      | 0.00   | 0.00     | 1       |
+| Froslass               | 1.00      | 0.80   | 0.89     | 5       |
+| Frosmoth               | 1.00      | 0.90   | 0.95     | 10      |
+| Gallade                | 1.00      | 1.00   | 1.00     | 36      |
+| Galvantula             | 1.00      | 1.00   | 1.00     | 9       |
+| Garchomp               | 0.86      | 1.00   | 0.92     | 120     |
+| Gardevoir              | 1.00      | 1.00   | 1.00     | 18      |
+| Garganacl              | 1.00      | 1.00   | 1.00     | 97      |
+| Gastly                 | 0.00      | 0.00   | 0.00     | 1       |
+| Gastrodon              | 0.97      | 1.00   | 0.99     | 39      |
+| Gengar                 | 1.00      | 1.00   | 1.00     | 10      |
+| Gholdengo              | 0.90      | 1.00   | 0.95     | 135     |
+| Gimmighoul             | 0.00      | 0.00   | 0.00     | 1       |
+| Girafarig              | 0.00      | 0.00   | 0.00     | 1       |
+| Glaceon                | 1.00      | 0.67   | 0.80     | 3       |
+| Glalie                 | 1.00      | 1.00   | 1.00     | 2       |
+| Gligar                 | 0.00      | 0.00   | 0.00     | 2       |
+| Glimmet                | 1.00      | 0.75   | 0.86     | 4       |
+| Glimmora               | 0.95      | 1.00   | 0.98     | 21      |
+| Gliscor                | 1.00      | 1.00   | 1.00     | 3       |
+| Gogoat                 | 1.00      | 1.00   | 1.00     | 1       |
+| Golduck                | 1.00      | 1.00   | 1.00     | 1       |
+| Golurk                 | 0.00      | 0.00   | 0.00     | 1       |
+| Goodra                 | 1.00      | 1.00   | 1.00     | 8       |
+| Gothitelle             | 1.00      | 1.00   | 1.00     | 4       |
+| Grafaiai               | 1.00      | 0.93   | 0.97     | 15      |
+| Graveler               | 0.00      | 0.00   | 0.00     | 1       |
+| Great Tusk             | 0.72      | 1.00   | 0.84     | 51      |
+| Greninja               | 1.00      | 1.00   | 1.00     | 19      |
+| Grimmsnarl             | 0.89      | 1.00   | 0.94     | 25      |
+| Growlithe              | 0.00      | 0.00   | 0.00     | 0       |
+| Grumpig                | 0.00      | 0.00   | 0.00     | 1       |
+| Gurdurr                | 0.00      | 0.00   | 0.00     | 2       |
+| Guzzlord               | 0.00      | 0.00   | 0.00     | 1       |
+| Gyarados               | 0.77      | 1.00   | 0.87     | 20      |
+| Hariyama               | 1.00      | 1.00   | 1.00     | 3       |
+| Hatterene              | 1.00      | 1.00   | 1.00     | 16      |
+| Haunter                | 0.00      | 0.00   | 0.00     | 1       |
+| Hawlucha               | 0.86      | 1.00   | 0.92     | 6       |
+| Haxorus                | 0.86      | 1.00   | 0.92     | 6       |
+| Heatran                | 0.75      | 1.00   | 0.86     | 9       |
+| Heracross              | 1.00      | 0.89   | 0.94     | 9       |
+| Hippowdon              | 1.00      | 1.00   | 1.00     | 3       |
+| Honchkrow              | 1.00      | 1.00   | 1.00     | 1       |
+| Hoopa-Unbound          | 1.00      | 1.00   | 1.00     | 2       |
+| Houndoom               | 1.00      | 1.00   | 1.00     | 3       |
+| Houndstone             | 1.00      | 1.00   | 1.00     | 3       |
+| Hydreigon              | 0.73      | 1.00   | 0.85     | 11      |
+| Indeedee-F             | 1.00      | 1.00   | 1.00     | 3       |
+| Infernape              | 0.00      | 0.00   | 0.00     | 0       |
+| Inteleon               | 0.00      | 0.00   | 0.00     | 1       |
+| Iron Bundle            | 0.95      | 1.00   | 0.97     | 19      |
+| Iron Hands             | 0.44      | 1.00   | 0.62     | 12      |
+| Iron Jugulis           | 1.00      | 1.00   | 1.00     | 4       |
+| Iron Leaves            | 1.00      | 1.00   | 1.00     | 3       |
+| Iron Moth              | 0.40      | 1.00   | 0.57     | 8       |
+| Iron Thorns            | 1.00      | 1.00   | 1.00     | 4       |
+| Iron Treads            | 1.00      | 1.00   | 1.00     | 2       |
+| Iron Valiant           | 0.85      | 1.00   | 0.92     | 11      |
+| Jigglypuff             | 0.00      | 0.00   | 0.00     | 1       |
+| Jolteon                | 1.00      | 1.00   | 1.00     | 4       |
+| Joltik                 | 1.00      | 1.00   | 1.00     | 1       |
+| Kangaskhan             | 0.00      | 0.00   | 0.00     | 1       |
+| Kartana                | 1.00      | 1.00   | 1.00     | 3       |
+| Keldeo-Resolute        | 0.00      | 0.00   | 0.00     | 1       |
+| Kilowattrel            | 1.00      | 1.00   | 1.00     | 2       |
+| Kingambit              | 0.71      | 1.00   | 0.83     | 5       |
+| Kingdra                | 1.00      | 1.00   | 1.00     | 2       |
+| Klawf                  | 1.00      | 1.00   | 1.00     | 2       |
+| Klefki                 | 1.00      | 1.00   | 1.00     | 1       |
+| Komala                 | 1.00      | 1.00   | 1.00     | 1       |
+| Kommo-o                | 0.00      | 0.00   | 0.00     | 0       |
+| Krookodile             | 1.00      | 1.00   | 1.00     | 2       |
+| Landorus-Therian       | 1.00      | 1.00   | 1.00     | 2       |
+| Lanturn                | 0.00      | 0.00   | 0.00     | 1       |
+| Lechonk                | 0.00      | 0.00   | 0.00     | 1       |
+| Lokix                  | 1.00      | 1.00   | 1.00     | 6       |
+| Lopunny                | 0.25      | 1.00   | 0.40     | 1       |
+| Lumineon               | 0.00      | 0.00   | 0.00     | 1       |
+| Lurantis               | 1.00      | 1.00   | 1.00     | 1       |
+| Luxray                 | 1.00      | 1.00   | 1.00     | 2       |
+| Lycanroc-Dusk          | 0.00      | 0.00   | 0.00     | 0       |
+| Mabosstiff             | 0.00      | 0.00   | 0.00     | 0       |
+| Magearna-Original      | 0.00      | 0.00   | 0.00     | 1       |
+| Magneton               | 1.00      | 1.00   | 1.00     | 3       |
+| Makuhita               | 0.00      | 0.00   | 0.00     | 0       |
+| Marowak-Alola          | 1.00      | 1.00   | 1.00     | 1       |
+| Masquerain             | 1.00      | 1.00   | 1.00     | 1       |
+| Maushold               | 1.00      | 1.00   | 1.00     | 1       |
+| Maushold-Four          | 1.00      | 1.00   | 1.00     | 4       |
+| Mawile                 | 1.00      | 1.00   | 1.00     | 1       |
+| Meowscarada            | 0.33      | 1.00   | 0.50     | 2       |
+| Metagross              | 1.00      | 1.00   | 1.00     | 1       |
+| Mew                    | 1.00      | 1.00   | 1.00     | 1       |
+| Mimikyu                | 1.00      | 1.00   | 1.00     | 2       |
+| Miraidon               | 0.50      | 1.00   | 0.67     | 1       |
+| Mismagius              | 1.00      | 1.00   | 1.00     | 1       |
+| Munchlax               | 0.00      | 0.00   | 0.00     | 0       |
+| Murkrow                | 0.09      | 1.00   | 0.17     | 1       |
+| Nacli                  | 0.00      | 0.00   | 0.00     | 1       |
+| Naclstack              | 1.00      | 0.50   | 0.67     | 2       |
+| Ninetales              | 0.67      | 1.00   | 0.80     | 2       |
+| Noivern                | 1.00      | 1.00   | 1.00     | 3       |
+| Numel                  | 0.00      | 0.00   | 0.00     | 1       |
+| Nymble                 | 1.00      | 1.00   | 1.00     | 1       |
+| Octillery              | 1.00      | 1.00   | 1.00     | 3       |
+| Oricorio-Pom-Pom       | 1.00      | 1.00   | 1.00     | 1       |
+| Oricorio-Sensu         | 1.00      | 1.00   | 1.00     | 1       |
+| Palafin                | 1.00      | 1.00   | 1.00     | 1       |
+| Palossand              | 1.00      | 1.00   | 1.00     | 1       |
+| Pawmot                 | 1.00      | 1.00   | 1.00     | 2       |
+| Pelipper               | 0.11      | 1.00   | 0.20     | 1       |
+| Polteageist            | 0.00      | 0.00   | 0.00     | 1       |
+| Quagsire               | 1.00      | 1.00   | 1.00     | 1       |
+| Raichu-Alola           | 1.00      | 1.00   | 1.00     | 1       |
+| Regieleki              | 1.00      | 1.00   | 1.00     | 1       |
+| Roaring Moon           | 0.00      | 0.00   | 0.00     | 0       |
+| Rotom-Heat             | 1.00      | 1.00   | 1.00     | 1       |
+| Rotom-Wash             | 0.00      | 0.00   | 0.00     | 0       |
+| Salamence              | 0.50      | 1.00   | 0.67     | 1       |
+| Scizor                 | 0.09      | 1.00   | 0.17     | 1       |
+| Scolipede              | 1.00      | 1.00   | 1.00     | 1       |
+| Scovillain             | 0.00      | 0.00   | 0.00     | 0       |
+| Scream Tail            | 0.00      | 0.00   | 0.00     | 0       |
+| Shuckle                | 1.00      | 1.00   | 1.00     | 3       |
+| Slither Wing           | 0.00      | 0.00   | 0.00     | 0       |
+| Slowking               | 1.00      | 1.00   | 1.00     | 1       |
+| Slowpoke               | 1.00      | 1.00   | 1.00     | 1       |
+| Snover                 | 0.00      | 0.00   | 0.00     | 1       |
+| Spinda                 | 1.00      | 1.00   | 1.00     | 2       |
+| Swampert               | 0.00      | 0.00   | 0.00     | 0       |
+| Sylveon                | 0.00      | 0.00   | 0.00     | 0       |
+| Talonflame             | 0.00      | 0.00   | 0.00     | 0       |
+| Tatsugiri              | 0.00      | 0.00   | 0.00     | 0       |
+| Tauros-Paldea-Blaze    | 1.00      | 1.00   | 1.00     | 1       |
+| Toedscool              | 0.00      | 0.00   | 0.00     | 0       |
+| Torkoal                | 0.00      | 0.00   | 0.00     | 1       |
+| Toxapex                | 0.00      | 0.00   | 0.00     | 0       |
+| Toxtricity             | 0.00      | 0.00   | 0.00     | 0       |
+| Tynamo                 | 0.00      | 0.00   | 0.00     | 0       |
+| Tyranitar              | 0.00      | 0.00   | 0.00     | 0       |
+| Umbreon                | 0.20      | 1.00   | 0.33     | 1       |
+| Venusaur               | 0.00      | 0.00   | 0.00     | 0       |
+| Vivillon               | 1.00      | 1.00   | 1.00     | 1       |
+| Volcarona              | 0.00      | 0.00   | 0.00     | 0       |
+| Wattrel                | 0.00      | 0.00   | 0.00     | 0       |
+|                        |           |        |          |         |
+| accuracy               |           |        | 0.96     | 7903    |
+| macro avg              | 0.65      | 0.62   | 0.62     | 7903    |
+| weighted avg           | 0.96      | 0.96   | 0.96     | 7903    |
