@@ -32,7 +32,7 @@ def load_model_interactive():
     return model, tokenizer
 
 
-def get_win_prob(model, tokenizer, team, format):
+def get_win_prob(tokenizer, team, format):
     model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH_BASE + WIN_PROB_MODEL).to(DEVICE).eval()
     ids = make_ids_from_team(team, format, tokenizer)
     ids['input_ids'][0][0] = tokenizer.special_token_map['[MASK]']
@@ -43,7 +43,7 @@ def get_win_prob(model, tokenizer, team, format):
     return win_logit
 
 
-def get_win_prob_batched(model, tokenizer, teams, format):
+def get_win_prob_batched(tokenizer, teams, format):
     model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH_BASE + WIN_PROB_MODEL).to(DEVICE).eval()
     all_inputs = []
     for team in teams:
@@ -67,17 +67,6 @@ def get_team_probability(model, tokenizer, team, format):
     beam_search_results = beam_search_batched(model, tokenizer, [], format, 20, list(forbidden), silent=True)
     prob = beam_search_results[0][1]
     return prob
-    # intermediate = []
-    # probs = []
-    # for i, pokemon in enumerate(team):
-    #     ids = make_ids_from_team(intermediate, format, tokenizer)
-    #     logits = model(**ids).logits
-    #     logits = logits[0, TEAM_1_START_INDEX + i, :]
-    #     logits = torch.softmax(logits, dim=0)
-    #     probs.append(logits[tokenizer.encode(pokemon)].item())
-    #     intermediate.append(pokemon)
-    # print(probs)
-    # return np.prod(probs) * np.power(10, power)
 
 
 def analyse_viability(chosen_pokemon: List[str], format: str):
@@ -301,7 +290,7 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
 
     beam_search_results = beam_search_batched(model, tokenizer, chosen_pokemon, format, 200, forbidden_pokemon)
     beam_search_results = beam_search_results[:200]
-    win_scores = get_win_prob_batched(None, tokenizer, [x[0] for x in beam_search_results], format)
+    win_scores = get_win_prob_batched(tokenizer, [x[0] for x in beam_search_results], format)
 
     for i, (team, score) in tqdm(enumerate(beam_search_results), desc="Evaluating Teams", leave=False,
                                  total=len(beam_search_results)):
@@ -328,19 +317,6 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
               f"\tProb Score: {prob_score:5.2f}"
               f"\tWin Score: {win_score * 100:5.2f}"
               f"\tCombined Score: {combined_score:5.2f}")
-    # print()
-    # print(f"\tBased on Win Probability:")
-    # for i, ((team, prob_score), win_score) in enumerate(sorted(final, key=lambda x: x[1], reverse=True)[:10]):
-    #     print(f"\t{i + 1}.\t"
-    #           f"{team[0].ljust(ljust_size)}"
-    #           f"{team[1].ljust(ljust_size)}"
-    #           f"{team[2].ljust(ljust_size)}"
-    #           f"{team[3].ljust(ljust_size)}"
-    #           f"{team[4].ljust(ljust_size)}"
-    #           f"{team[5].ljust(ljust_size)}"
-    #           f"\tProb Score: {prob_score * np.power(10, power):5.2f}"
-    #           f"\t\tWin Score: {win_score:5.2f}"
-    #           f"\t\tCombined: {prob_score*win_score* np.power(10, power):5.2f}")
     return final[0][0]
 
 
@@ -453,7 +429,7 @@ if __name__ == '__main__':
     print()
     make_set_suggestion_team(format, chosen_pokemon)
     analyse_viability(chosen_pokemon, format)
-    win_prob = get_win_prob(model, tokenizer, chosen_pokemon, format)
+    win_prob = get_win_prob(tokenizer, chosen_pokemon, format)
     team_prob = get_team_probability(model, tokenizer, chosen_pokemon, format)
     print(f"CS: {team_prob * win_prob * np.power(10, 6):.0f}")
     print(f"PS: {team_prob * np.power(10, 6):.0f}")
