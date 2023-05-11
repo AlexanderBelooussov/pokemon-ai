@@ -1,7 +1,7 @@
 import os
 
-from data_classes import *
 from ban_lists import BAN_LISTS
+from data_classes import *
 
 
 def name_corrections(name):

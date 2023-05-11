@@ -2,8 +2,8 @@ import os
 import time
 
 import requests
-
 from tqdm import tqdm
+
 
 # TODO: make index file
 
@@ -14,7 +14,7 @@ def search_format(format='gen9ou', page_limit=25):
     type = "log"
     downloaded = 0
     done = False
-    for page in tqdm(range(1, page_limit+1), desc=f'Searching and downloading {format} replays'):
+    for page in tqdm(range(1, page_limit + 1), desc=f'Searching and downloading {format} replays'):
         if done:
             break
         url = f'https://replay.pokemonshowdown.com/search.json?format={format}&page={page}'

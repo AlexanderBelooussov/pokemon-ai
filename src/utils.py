@@ -82,3 +82,50 @@ def load_model(name: Optional[str] = None):
 def read_json(filename):
     with open(filename, 'r') as f:
         return json.load(f)
+
+
+def restore_ids(inputs):
+    """
+    Restore ids to the original ids
+    This is necessary when inputs are changed when masking
+    This resets the ids so they can be remasked
+    :param inputs: inputs to restore
+    :return: restored inputs
+    """
+    if 'labels' not in inputs:
+        return inputs
+    for j, label in enumerate(inputs['labels']):
+        if label != -100:
+            inputs['input_ids'][j] = label
+    inputs.pop('labels')
+    return inputs
+
+
+def find_teams_distilbert(inputs, tokenizer):
+    inputs = inputs['input_ids'][:]
+    team1 = []
+    sep_index = 0
+    team2 = []
+    for i, token in enumerate(inputs):
+        if token == tokenizer.special_token_map['[SEP]']:
+            if len(team1) == 0:
+                team1 = inputs[TEAM_1_START_INDEX:i]
+                sep_index = i
+                continue
+            elif len(team2) == 0:
+                team2 = inputs[sep_index + 1:i]
+                break
+    return team1, team2
+
+
+def find_teams_bert(inputs):
+    ids = inputs['input_ids'][:]
+    types = inputs['token_type_ids'][:]
+    team1 = []
+    team2 = []
+    for i, token in enumerate(ids):
+        if types[i] == 2:
+            team1.append(token)
+        elif types[i] == 3:
+            team2.append(token)
+    return team1, team2

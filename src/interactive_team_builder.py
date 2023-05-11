@@ -5,18 +5,16 @@ from typing import List, Optional
 import numpy as np
 import torch
 from tqdm import tqdm
-
-from battle_tokenizer import BattleTokenizer, BERTBattleTokenizer
-from beam_search import beam_search, beam_search_batched
 from transformers import AutoModelForMaskedLM
 
+from beam_search import beam_search_batched
 from utils import read_json, find_usage_file, make_tokens_from_team, make_input_ids, TEAM_1_START_INDEX, DEVICE, \
     make_ids_from_team
 
 # MODEL_PATH_BASE = "Zeniph/pokemon-team-builder-transformer-"
 # MODEL_PATH_TYPE = "deberta4-large"
 MODEL_PATH_BASE = "checkpoints/pokemon-team-builder-transformer-"
-VERSION = "deberta9"
+VERSION = "deberta6"
 MODEL_PATH_TYPE = f"{VERSION}-team-builder"
 WIN_PROB_MODEL = f"{VERSION}-pretrain"
 
@@ -43,6 +41,7 @@ def get_win_prob(model, tokenizer, team, format):
     logits = torch.softmax(logits, dim=0)
     win_logit = logits[0].item()
     return win_logit
+
 
 def get_win_prob_batched(model, tokenizer, teams, format):
     model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH_BASE + WIN_PROB_MODEL).to(DEVICE).eval()
@@ -242,7 +241,7 @@ def make_set_suggestion_team(format: str, team: List[str]):
         if suggestion is None:
             continue
         abilities, items, moves, spreads = suggestion['abilities'], suggestion['items'], suggestion['moves'], \
-                                           suggestion['spreads']
+            suggestion['spreads']
         print(f"{pokemon} Alternatives:")
         if len(abilities) > 1:
             for i, (ability, a_score) in enumerate(abilities):
@@ -293,7 +292,8 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
     # estimate probabilities of given team
     if len(chosen_pokemon) > 0:
         forbidden = set(tokenizer.token_map.keys()) - set(chosen_pokemon)
-        bsr = beam_search_batched(model, tokenizer, [], format, 20, list(forbidden), silent=True, total_steps=len(chosen_pokemon))
+        bsr = beam_search_batched(model, tokenizer, [], format, 20, list(forbidden), silent=True,
+                                  total_steps=len(chosen_pokemon))
         est_chosen_prob = bsr[0][1]
         chosen_pokemon = list(bsr[0][0])
     else:
@@ -303,8 +303,8 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
     beam_search_results = beam_search_results[:200]
     win_scores = get_win_prob_batched(None, tokenizer, [x[0] for x in beam_search_results], format)
 
-
-    for i, (team, score) in tqdm(enumerate(beam_search_results), desc="Evaluating Teams", leave=False, total=len(beam_search_results)):
+    for i, (team, score) in tqdm(enumerate(beam_search_results), desc="Evaluating Teams", leave=False,
+                                 total=len(beam_search_results)):
         # winl = get_win_prob(model, tokenizer, team, format)
         winl = win_scores[i]
         if len(chosen_pokemon) > 8:
@@ -326,7 +326,7 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
               f"{team[4].ljust(ljust_size)}"
               f"{team[5].ljust(ljust_size)}"
               f"\tProb Score: {prob_score:5.2f}"
-              f"\tWin Score: {win_score*100:5.2f}"
+              f"\tWin Score: {win_score * 100:5.2f}"
               f"\tCombined Score: {combined_score:5.2f}")
     # print()
     # print(f"\tBased on Win Probability:")
@@ -392,7 +392,8 @@ if __name__ == '__main__':
         print("You can either enter the name of the pokemon, or enter one of the options below.")
         print("\tTo forbid a pokemon from being suggested, enter 'forbid <pokemon>'.")
         print("\tTo remove a pokemon from your team, enter 'remove <pokemon>'.")
-        print("\t1. If you would like some AI suggestions for the first pokemon in your team, enter 'suggestions' or 1.")
+        print(
+            "\t1. If you would like some AI suggestions for the first pokemon in your team, enter 'suggestions' or 1.")
         print("\t2. If you would like to generate a random team, enter 'random' or 2.")
         print("\t3. If you would like to see the usage stats for the current format, enter 'usage' or 3.")
         print("\t4. If you would like to see the viability ceiling for the current format, enter 'viability' or 4.")

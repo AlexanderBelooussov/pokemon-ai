@@ -10,3 +10,6 @@ replay.log
 */runs
 __pycache__
 pokemon-team-builder-*
+pickles
+interactive_model
+checkpoints
