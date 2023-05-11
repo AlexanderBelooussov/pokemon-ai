@@ -15,8 +15,6 @@ from utils import *
 
 
 # TODO: split data into "brackets" based on elo -> needs more data
-# TODO: add lead as token -> not sure if it's a good idea
-# TODO: add evaluations for fine-tuned models
 
 class RemaskCallback(TrainerCallback):
     def __init__(self, unmasked_train_dataset, unmasked_test_dataset, tokenizer, task='pretrain'):
@@ -182,22 +180,24 @@ def switched_sides_dataset(tokenizer, dataset):
 
 
 def tokenize_dataset(formats: List[str], name: str):
-    tokenizer_file = f"pickles/tokenizer.pkl" if DISTILBERT_LIKE else f"pickles/bert_tokenizer.pkl"
+    # remove training step from name
+    for x in ["-pretrain", "-team-builder", "-viability", "-winner"]:
+        name = name.replace(x, "")
+
+    tokenizer_file = f"pickles/tokenizer.pkl" if DISTILBERT_LIKE else f"pickles/bert_tokenizer-{name}.pkl"
     if not os.path.exists(tokenizer_file):
         tokenizer = BattleTokenizer() if DISTILBERT_LIKE else BERTBattleTokenizer(formats=formats)
     else:
         with open(tokenizer_file, 'rb') as f:
             tokenizer = pickle.load(f)
 
-    # remove training step from name
-    while "deberta" not in name.split("-")[-1]:
-        name = name.split('-')[:-1]
-        name = '-'.join(name)
-
     if not os.path.exists(f'pickles/dataset-{name}.pkl') or not os.path.exists(tokenizer_file):
         tokenizer.rating_dist = {}
         dataset = []
         for format in tqdm(formats, desc=f"Tokenizing formats", leave=False):
+            # check if directory exists
+            if not os.path.exists(f'replays/{format}'):
+                continue
             for filename in tqdm(os.listdir(f'replays/{format}'), desc=f"Tokenizing {format} replays", leave=False):
                 if filename.endswith('.log'):
                     f = os.path.join(f'replays/{format}', filename)
@@ -216,31 +216,6 @@ def tokenize_dataset(formats: List[str], name: str):
     else:
         with open(f'pickles/dataset-{name}.pkl', 'rb') as f:
             dataset = pickle.load(f)
-    # group distribution into 4 buckets
-    # rated = [x for x in tokenizer.rating_dist.items() if x[0] != "unrated"]
-    # sorted(rated, key=lambda x: x[0], reverse=True)
-    # total = sum([x[1] for x in rated])
-    # top10percent = int(total * 0.1)
-    # top40percent = int(total * 0.4)
-    # bucketed = {"high": 0, "mid": 0, "low": 0}
-    # current = "high"
-    # s = 0
-    # thresholds = []
-    # for rating, count in rated:
-    #     if s > top10percent and current == "high":
-    #         current = "mid"
-    #         thresholds.append(rating)
-    #     if s > top40percent and current == "mid":
-    #         current = "low"
-    #         thresholds.append(rating)
-    #     bucketed[current] += count
-    #     s += count
-    # bucketed["unrated"] = tokenizer.rating_dist["unrated"]
-    # # plot rating distribution
-    # print(f"thresholds: {thresholds}")
-    # import matplotlib.pyplot as plt
-    # plt.bar(bucketed.keys(), bucketed.values(), color='g')
-    # plt.show()
     return dataset, tokenizer
 
 
@@ -298,6 +273,7 @@ def viability_mask(inputs):
     assert len(masked_inputs["attention_mask"]) == len(inputs["input_ids"])
     assert len(masked_inputs["token_type_ids"]) == len(inputs["input_ids"])
     return masked_inputs
+
 
 def prob_mask(inputs, max_value, formats, task='pretrain'):
     masked_inputs = copy.deepcopy(inputs)
@@ -366,7 +342,8 @@ def mask(dataset, tokenizer=None, task='pretrain'):
     return masked
 
 
-def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved=False, save_name=None, custom_task="pretrain"):
+def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved=False, save_name=None,
+          custom_task="pretrain"):
     def compute_metrics(eval_pred):
         predictions, labels = eval_pred
         predictions = np.argmax(predictions, axis=2)
@@ -376,8 +353,6 @@ def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved
         for i, (preds, labs) in enumerate(zip(predictions, labels)):
             true_predictions.extend([p for p, l in zip(preds, labs) if l != -100])
             true_labels.extend([l for l in labs if l != -100])
-        # print(true_labels)
-        # print(true_predictions)
         return {
             "weighted_f1": f1_score(true_predictions, true_labels, average='weighted', zero_division=0),
             "macro_f1": f1_score(true_predictions, true_labels, average='macro', zero_division=0),
@@ -389,12 +364,6 @@ def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved
     # modify the training dataset to add more samples
     switched = switched_sides_dataset(tokenizer, dataset_train)
     dataset_train.extend(switched)
-    # shuffles = []
-    # for i in range(4):
-    #     shuffled = shuffle_teams_dataset(tokenizer, dataset_train)
-    #     shuffles.append(shuffled)
-    # for shuffle in shuffles:
-    #     dataset_train.extend(shuffle)
     np.random.shuffle(dataset_train)
 
     print(f"\nTraining on {len(dataset_train)} samples\n")
@@ -421,8 +390,8 @@ def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved
             config.num_attention_heads = 12
             # config.cls_token_id = tokenizer.special_token_map["[CLS]"]
         else:
-            config.n_layers = 6
-            config.n_heads = 12
+            config.n_layers = 3
+            config.n_heads = 4
 
         model = AutoModelForMaskedLM.from_config(
             config=config
@@ -432,11 +401,11 @@ def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved
                 param.requires_grad = False
 
     training_args = TrainingArguments(
-        output_dir=name,
-        learning_rate=1e-5,
-        per_device_train_batch_size=128,
-        per_device_eval_batch_size=128,
-        num_train_epochs=200,
+        output_dir=f"checkpoints/{name}",
+        learning_rate=1e-6,
+        per_device_train_batch_size=64,
+        per_device_eval_batch_size=64,
+        num_train_epochs=40,
         weight_decay=0.01,
         evaluation_strategy="epoch",
         save_strategy="epoch",
@@ -468,9 +437,9 @@ def train(dataset_train, dataset_test, tokenizer, name=DEFAULT_MODEL, from_saved
     )
 
     trainer.train()
-    trainer.save_model(name)
+    trainer.save_model(f"checkpoints/{name}")
     # remove checkpoints
-    for dir in os.listdir(name):
+    for dir in os.listdir(f"checkpoints/{name}"):
         if dir.startswith('checkpoint'):
             shutil.rmtree(os.path.join(name, dir))
     return model
@@ -562,8 +531,8 @@ def test_viability(dataset, model=None, name: str = 'pokemon-team-builder-transf
         model_input["input_ids"][0] = 4
         team_2_start = model_input["token_type_ids"].index(3)
         for i in range(team_2_start, len(model_input["token_type_ids"])):
-            model_input["input_ids"][i] = 2
-            model_input["attention_mask"][i] = 0
+            model_input["input_ids"][i] = 4
+            model_input["attention_mask"][i] = 1
         model_input["input_ids"] = torch.tensor(test["input_ids"]).unsqueeze(0).to(DEVICE)
         model_input["token_type_ids"] = torch.tensor(test["token_type_ids"]).unsqueeze(0).to(DEVICE)
         model_input["position_ids"] = torch.tensor(test["position_ids"]).unsqueeze(0).to(DEVICE)
@@ -585,7 +554,7 @@ def test_viability(dataset, model=None, name: str = 'pokemon-team-builder-transf
     print(classification_report(true_viability, predicted_viability, zero_division=0))
 
 
-def test_team_builder(dataset, model = None, name: str = 'pokemon-team-builder-transformer'):
+def test_team_builder(dataset, model=None, name: str = 'pokemon-team-builder-transformer'):
     if model is None:
         model = Model.from_pretrained(name).to(DEVICE)
 
@@ -628,33 +597,47 @@ def test_team_builder(dataset, model = None, name: str = 'pokemon-team-builder-t
         print(classification_report(true_mon, predicted_mon, zero_division=0))
 
 
-
 if __name__ == '__main__':
-    formats = ['gen9ou', 'gen9monotype', 'gen9doublesou', 'gen9vgc2023series1', 'gen9nationaldex', 'gen9uu', 'gen9ru',
-               'gen9ubers', 'gen9vgc2023series2']
+    formats = ['gen9ou',
+               'gen9monotype',
+               'gen9doublesou',
+               'gen9vgc2023regulationc',
+               'gen9nationaldex',
+               'gen9uu',
+               'gen9ru',
+               'gen9ubers',
+               'gen9vgc2023series2',
+               'gen9nationaldexmonotype',
+               'gen9vgc2023series1',
+               'banned']
     # pretrain, team-builder, winner, viability
-    task = "viability"
-    name = f'pokemon-team-builder-transformer-deberta6-{task}'
+    task = "pretrain"
+    name = f'pokemon-team-builder-transformer-deberta10-{task}'
     seed = 42
     np.random.seed(seed)
     dataset, tokenizer = tokenize_dataset(formats=formats, name=name)
-    name = f'pokemon-team-builder-transformer-deberta6.2-{task}'
 
     dataset_train, dataset_test = train_test_split(dataset, test_size=0.05, random_state=seed)
     dataset_train, dataset_val = train_test_split(dataset_train, test_size=0.1, random_state=seed)
 
-    model = train(dataset_train, dataset_val, tokenizer, name=name, from_saved=True,
-                  save_name="pokemon-team-builder-transformer-deberta6-pretrain", custom_task=task)
-    # model = train(dataset_train, dataset_val, tokenizer, name=name, from_saved=False)
+    if task == "pretrain":
+        model = train(dataset_train, dataset_val, tokenizer, name=name, from_saved=True,
+                      save_name=f'checkpoints/pokemon-team-builder-transformer-deberta9-pretrain')
+    else:
+        dash_count = task.count('-') + 1
+        save_name = "-".join(name.split('-')[:-dash_count]) + "-pretrain"
+        save_name = f"checkpoints/{save_name}"
+        model = train(dataset_train, dataset_val, tokenizer, name=name, from_saved=True,
+                      save_name=save_name, custom_task=task)
 
     if task == "viability":
-        test_viability(dataset_test, name=name)
+        test_viability(dataset_test, name=f"checkpoints/{name}")
     elif task == "team-builder":
-        test_team_builder(dataset_test, name=name)
+        test_team_builder(dataset_test, name=f"checkpoints/{name}")
     elif task == "pretrain":
-        test_outcome_prediction(dataset_test, name=name, test_index=0)
-        test_outcome_prediction(dataset_test, name=name, test_index=1)
-        test_outcome_prediction(dataset_test, name=name, test_index=2)
+        test_outcome_prediction(dataset_test, name=f"checkpoints/{name}", test_index=0)
+        test_outcome_prediction(dataset_test, name=f"checkpoints/{name}", test_index=1)
+        test_outcome_prediction(dataset_test, name=f"checkpoints/{name}", test_index=2)
         #
-        # test_prediction_per_format(dataset_test, name=name, test_index=0)
-        # test_prediction_per_format(dataset_test, name=name, test_index=2)
+        test_prediction_per_format(dataset_test, name=f"checkpoints/{name}", test_index=0)
+        # test_prediction_per_format(dataset_test, name=f"checkpoints/{name}", test_index=2)

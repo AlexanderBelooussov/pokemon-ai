@@ -15,20 +15,20 @@ from utils import read_json, find_usage_file, make_tokens_from_team, make_input_
 
 # MODEL_PATH_BASE = "Zeniph/pokemon-team-builder-transformer-"
 # MODEL_PATH_TYPE = "deberta4-large"
-MODEL_PATH_BASE = "pokemon-team-builder-transformer-"
-MODEL_PATH_TYPE = "deberta6-team-builder"
-WIN_PROB_MODEL = 'deberta6-viability'
+MODEL_PATH_BASE = "checkpoints/pokemon-team-builder-transformer-"
+VERSION = "deberta9"
+MODEL_PATH_TYPE = f"{VERSION}-team-builder"
+WIN_PROB_MODEL = f"{VERSION}-pretrain"
 
 
 # TODO: use data classes and add printing to them
 # TODO: Make suggested sets always legal
-# TODO: evaluate viability using second model
+# TODO: Update usage data
 
 def load_model_interactive():
-    tokenizer_name = MODEL_PATH_TYPE.split('-')[0]
-    for file in os.listdir(f"interactive_model"):
-        if tokenizer_name in file:
-            with open(f"interactive_model/{file}", 'rb') as f:
+    for file in os.listdir(f"pickles"):
+        if "tokenizer" in file and VERSION in file:
+            with open(f"pickles/{file}", 'rb') as f:
                 tokenizer = pickle.load(f)
     model = AutoModelForMaskedLM.from_pretrained(MODEL_PATH_BASE + MODEL_PATH_TYPE).to(DEVICE).eval()
     return model, tokenizer
@@ -297,7 +297,7 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
         est_chosen_prob = bsr[0][1]
         chosen_pokemon = list(bsr[0][0])
     else:
-        est_chosen_prob = 1
+        est_chosen_prob = 0
 
     beam_search_results = beam_search_batched(model, tokenizer, chosen_pokemon, format, 200, forbidden_pokemon)
     beam_search_results = beam_search_results[:200]
@@ -310,8 +310,9 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
         if len(chosen_pokemon) > 8:
             real_prob_score = get_team_probability(model, tokenizer, team, format)
         else:
-            real_prob_score = score * est_chosen_prob
-        combined_score = winl * real_prob_score
+            real_prob_score = score + est_chosen_prob
+        combined_score = np.log(winl) + real_prob_score
+        # combined_score = real_prob_score
         final.append((team, real_prob_score, winl, combined_score))
     ljust_size = max([max([len(pokemon) for pokemon in team]) for team, _ in beam_search_results]) + 2
 
@@ -324,9 +325,9 @@ def run_model(tokenizer, model, chosen_pokemon, format, n_suggestions=20, forbid
               f"{team[3].ljust(ljust_size)}"
               f"{team[4].ljust(ljust_size)}"
               f"{team[5].ljust(ljust_size)}"
-              f"\tProb Score: {prob_score * np.power(10, 6):5.2f}"
+              f"\tProb Score: {prob_score:5.2f}"
               f"\tWin Score: {win_score*100:5.2f}"
-              f"\tCombined Score: {combined_score * np.power(10, 6):5.2f}")
+              f"\tCombined Score: {combined_score:5.2f}")
     # print()
     # print(f"\tBased on Win Probability:")
     # for i, ((team, prob_score), win_score) in enumerate(sorted(final, key=lambda x: x[1], reverse=True)[:10]):
@@ -360,16 +361,18 @@ if __name__ == '__main__':
         print("\t7. [Gen9] UU")
         print("\t8. [Gen9] RU")
         print("\t9. [Gen9] VGC 2023 Series 2")
+        print("\t10. [Gen9] National Dex Monotype")
         format_map = {
             '1': 'gen9ou',
             '2': 'gen9doublesou',
             '3': 'gen9monotype',
-            '4': 'gen9vgc2023series1',
+            '4': 'gen9vgc2023regulationc',
             '5': 'gen9nationaldex',
             '6': 'gen9ubers',
             '7': 'gen9uu',
             '8': 'gen9ru',
-            '9': 'gen9vgc2023series2'
+            '9': 'gen9vgc2023series2',
+            '10': 'gen9nationaldexmonotype'
         }
         x = input("> ")
         format = format_map.get(x, None)
@@ -377,7 +380,6 @@ if __name__ == '__main__':
     chosen_pokemon = []
     forbidden_pokemon = []
     suggested = None
-    # chosen_pokemon = ['Dragapult', 'Roaring Moon', 'Iron Valiant', 'Great Tusk', 'Chien-Pao', 'Rotom-Wash']
     while len(chosen_pokemon) < 6:
         print()
         if len(chosen_pokemon):

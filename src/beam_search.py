@@ -1,5 +1,7 @@
 # finding best team with beam search
 import warnings
+
+import numpy as np
 import torch
 from utils import make_tokens_from_team, make_input_ids, TEAM_1_START_INDEX, load_model
 from tqdm import tqdm
@@ -23,7 +25,7 @@ def filter_beams(new_candidates, i, n_beams=5, silent=False):
     return to_keep
 
 
-def candidates_from_logits(tokenizer, mask_logits, n_beams=5, chosen_pokemon=None, prob=1, forbidden_pokemon=None):
+def candidates_from_logits(tokenizer, mask_logits, n_beams=5, chosen_pokemon=None, prob=0, forbidden_pokemon=None):
     if chosen_pokemon is None:
         chosen_pokemon = []
     if forbidden_pokemon is None:
@@ -41,7 +43,7 @@ def candidates_from_logits(tokenizer, mask_logits, n_beams=5, chosen_pokemon=Non
         if poke in forbidden_pokemon:
             continue
         candidate.append(poke)
-        value = float(top_k.values[i]) * prob
+        value = np.log(float(top_k.values[i])) + prob
         candidates[tuple(candidate)] = value
     return candidates
 

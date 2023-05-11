@@ -3,29 +3,34 @@ import os
 from data_classes import *
 from ban_lists import BAN_LISTS
 
+
 def name_corrections(name):
+    corrections = {
+        "Tauros-Paldea-Fire": "Tauros-Paldea-Blaze",
+        "Tauros-Paldea-Water": "Tauros-Paldea-Aqua",
+        "Tauros-Paldea": "Tauros-Paldea-Combat",
+        "Tatsugiri": "Tatsugiri",
+        "Florges": "Florges",
+        "Dudunsparce": "Dudunsparce",
+        "Shellos": "Shellos",
+        "Gastrodon": "Gastrodon",
+        "Unown": "Unown",
+        "Vivillon": "Vivillon",
+        "Floette": "Floette",
+        "Furfrou": "Furfrou",
+        "Alcremie": "Alcremie",
+        "Deerling": "Deerling",
+        "Sawsbuck": "Sawsbuck",
+
+    }
     # remove mega from name
     if "-Mega" in name:
         name = name.split("-Mega")[0]
-    # Tauros name check
-    if name == "Tauros-Paldea-Fire":
-        name = "Tauros-Paldea-Blaze"
-    elif name == "Tauros-Paldea-Water":
-        name = "Tauros-Paldea-Aqua"
-    elif name == "Tauros-Paldea":
-        name = "Tauros-Paldea-Combat"
-    # Tatsugiri is always the same regardless of form
-    elif "Tatsugiri" in name:
-        name = "Tatsugiri"
-    # Florges is always the same regardless of form
-    elif "Florges" in name:
-        name = "Florges"
-    # Dudunsparce is always the same regardless of form
-    elif "Dudunsparce" in name:
-        name = "Dudunsparce"
-    elif "Gastrodon" in name:
-        name = "Gastrodon"
+    for key in corrections:
+        if key in name:
+            name = corrections[key]
     return name
+
 
 def parse_replay(format, replay_id):
     filepath = f'replays/{format}/{replay_id}.log'
@@ -38,6 +43,7 @@ def parse_replay(format, replay_id):
     p1 = None
     p2 = None
     winner = None
+    contains_banned = False
 
     try:
         for raw_line in lines:
@@ -63,18 +69,18 @@ def parse_replay(format, replay_id):
             if "win" in split_line:
                 winner = split_line[2].rstrip()
             if "poke" in split_line:
-                    if "," in split_line[3]:
-                        name = split_line[3].split(', ')[0]
-                        gender = split_line[3].split(', ')[1]
-                    else:
-                        name = split_line[3]
-                        gender = None
-                    name = name_corrections(name)
-                    poke = Pokemon(name, gender)
-                    if "p1" in split_line:
-                        p1.add_pokemon(poke)
-                    elif "p2" in split_line:
-                        p2.add_pokemon(poke)
+                if "," in split_line[3]:
+                    name = split_line[3].split(', ')[0]
+                    gender = split_line[3].split(', ')[1]
+                else:
+                    name = split_line[3]
+                    gender = None
+                name = name_corrections(name)
+                poke = Pokemon(name, gender)
+                if "p1" in split_line:
+                    p1.add_pokemon(poke)
+                elif "p2" in split_line:
+                    p2.add_pokemon(poke)
             if "switch" in split_line:
                 name = split_line[3]
                 if "," in name:
@@ -139,7 +145,6 @@ def parse_replay(format, replay_id):
         print(raw_line)
         return None
 
-
     if winner is None:
         print(f"ERROR: {replay_id} has no winner")
         # delete replay file
@@ -152,15 +157,12 @@ def parse_replay(format, replay_id):
         os.remove(filepath)
         return None
 
-
     # check against bans
     ban_list = BAN_LISTS[format] if format in BAN_LISTS else []
     pokemon = [p.name for p in p1.team] + [p.name for p in p2.team]
     intersection = set(pokemon).intersection(set(ban_list))
     if len(intersection) > 0:
-        print(f"ERROR: {replay_id} has banned pokemon: {intersection}")
-        return None
-
+        contains_banned = True
 
     rating = int((p1.rating + p2.rating) / 2)
     battle = Battle(
@@ -171,8 +173,10 @@ def parse_replay(format, replay_id):
         p2=p2,
         winner=winner,
         rating=rating,
+        contains_banned=contains_banned,
     )
     return battle
+
 
 if __name__ == '__main__':
     battle = parse_replay('gen9monotype', 'gen9monotype-1769606826')

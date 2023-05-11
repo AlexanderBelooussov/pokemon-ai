@@ -83,8 +83,6 @@ class Player:
                     return poke
             print(f"Could not find pokemon {pokemon} in {self.name}'s team: {[x.name for x in self.team]}")
 
-
-
     def set_pokemon_ability(self, pokemon: Union[int, str], ability: str):
         self.get_pokemon(pokemon).ability = ability
 
@@ -101,9 +99,9 @@ class Player:
         self.get_pokemon(pokemon).tera = tera
 
 
-
 class Battle:
-    def __init__(self, b_id: str, b_format: str, rated: bool, p1: Player, p2: Player, winner: str, rating: int):
+    def __init__(self, b_id: str, b_format: str, rated: bool, p1: Player, p2: Player, winner: str, rating: int,
+                 contains_banned: bool = False):
         self.id = b_id
         self.format = b_format
         self.rated = rated
@@ -111,6 +109,9 @@ class Battle:
         self.p2 = p2
         self.winner = winner
         self.rating = rating
+        self.contains_banned = contains_banned
+        if self.contains_banned:
+            self.format = "banned"
         # self.log = log
 
     def __repr__(self):
@@ -123,4 +124,5 @@ class Battle:
                f"{self.p1}\n" \
                f"{self.p2}\n" \
                f"winner: {self.winner}\n" \
-               f"rating: {self.rating}"
+               f"rating: {self.rating}" \
+               f"contains banned: {self.contains_banned}"

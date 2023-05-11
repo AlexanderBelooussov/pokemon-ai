@@ -9,11 +9,14 @@ BAN_LISTS = {
         "Palafin",
         "Palafin-Hero",
         "Miraidon",
-        "Koraidon"
+        "Koraidon",
+        "Chien-Pao",
+        "Espathra"
     ],
     'gen9monotype': [
         "Flutter Mane",
-        "Cyclizar",
+        "Espathra",
+        "Chien-Pao",
     ],
     "gen9doublesou": [
         "Annihilape",
@@ -31,19 +34,44 @@ BAN_LISTS = {
         "Palafin",
         "Palafin-Hero",
         "Roaring Moon",
+        "Lugia",
+        "Annihilape",
+        "Walking Wake",
     ],
     "gen9nationaldexmonotype": [
         "Flutter Mane",
         "Roaring Moon",
         "Spectrier",
         "Chien-Pao",
+        "Espathra",
+        "Darmanitan-Galar",
+        "Landorus",
+        "Walking Wake",
+        "Regieleki",
+        "Melmetal",
     ],
     "gen9uu": [
         "Pelipper",
         "Orthworm",
-        "Espathra"
+        "Espathra",
+        "Iron Hands",
+        "Iron Leaves"
     ],
     "gen9ru": [
         "Magnezone",
+        "Drednaw",
+        "Haxorus",
+        "Kilowattrel",
+        "Floatzel",
+        "Polteageist",
+        "Hawlucha",
+        "Flamigo",
+        "Toxtricity",
+        "Toxtricity-Low-Key",
+        "Polteageist-Antique",
+        "Lycanroc-Dusk",
+        "Hariyama",
     ],
 }
+BAN_LISTS["gen9uu"] = BAN_LISTS["gen9uu"] + BAN_LISTS["gen9ou"]
+BAN_LISTS["gen9ru"] = BAN_LISTS["gen9ru"] + BAN_LISTS["gen9uu"]
